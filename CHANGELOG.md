@@ -1,5 +1,31 @@
 # Changelog
 
+## [6.0.17](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.0.16...plugins-source-k8s-v6.0.17) (2024-06-03)
+
+
+### Bug Fixes
+
+* **deps:** Update golang.org/x/exp digest to fd00a4e ([#18079](https://github.com/Infoblox-CTO/cloudquery/issues/18079)) ([5d90dc1](https://github.com/Infoblox-CTO/cloudquery/commit/5d90dc12325327d87e4f422d25f8d75d492f4baf))
+* **deps:** Update module github.com/cloudquery/cloudquery-api-go to v1.11.3 ([#18094](https://github.com/Infoblox-CTO/cloudquery/issues/18094)) ([821a1bc](https://github.com/Infoblox-CTO/cloudquery/commit/821a1bc04455692579d4cc9714dac61f7a8efcb6))
+* **deps:** Update module github.com/cloudquery/codegen to v0.3.14 ([#17658](https://github.com/Infoblox-CTO/cloudquery/issues/17658)) ([478eb9c](https://github.com/Infoblox-CTO/cloudquery/commit/478eb9c03f764322402703b3975b71b7086a5dea))
+* **deps:** Update module github.com/cloudquery/codegen to v0.3.15 ([#17659](https://github.com/Infoblox-CTO/cloudquery/issues/17659)) ([58586d0](https://github.com/Infoblox-CTO/cloudquery/commit/58586d012a8f4f38b0a693dcbd46d2340bb72a61))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.38.1 ([#17610](https://github.com/Infoblox-CTO/cloudquery/issues/17610)) ([a12d17b](https://github.com/Infoblox-CTO/cloudquery/commit/a12d17b6f93ef5379b0c11d1338f02dad28f1914))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.38.2 ([#17656](https://github.com/Infoblox-CTO/cloudquery/issues/17656)) ([058910b](https://github.com/Infoblox-CTO/cloudquery/commit/058910bcb37a6130deb55720a4a1afaec123a319))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.39.0 ([#17710](https://github.com/Infoblox-CTO/cloudquery/issues/17710)) ([e6b3986](https://github.com/Infoblox-CTO/cloudquery/commit/e6b39865d674cefb5b001a1c97a25779246087b5))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.39.1 ([#17760](https://github.com/Infoblox-CTO/cloudquery/issues/17760)) ([7f6faad](https://github.com/Infoblox-CTO/cloudquery/commit/7f6faad99e6678d17d449d0da18e0340a2537848))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.40.0 ([#17796](https://github.com/Infoblox-CTO/cloudquery/issues/17796)) ([1622575](https://github.com/Infoblox-CTO/cloudquery/commit/1622575f1eb776cafc637573010fd66f85877079))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.40.1 ([#17865](https://github.com/Infoblox-CTO/cloudquery/issues/17865)) ([a532364](https://github.com/Infoblox-CTO/cloudquery/commit/a532364842076cbfadbf146ab18634607a693ddf))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.41.0 ([#17917](https://github.com/Infoblox-CTO/cloudquery/issues/17917)) ([81f2506](https://github.com/Infoblox-CTO/cloudquery/commit/81f25061a461a025595aa0b4ed4bf992f53e67be))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.41.1 ([#17941](https://github.com/Infoblox-CTO/cloudquery/issues/17941)) ([b112a67](https://github.com/Infoblox-CTO/cloudquery/commit/b112a6798245d12ef82da532504a500c610cac10))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.42.0 ([#17951](https://github.com/Infoblox-CTO/cloudquery/issues/17951)) ([f5befb1](https://github.com/Infoblox-CTO/cloudquery/commit/f5befb1fba1089d78c594c39064466795c53a86e))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.42.1 ([#17965](https://github.com/Infoblox-CTO/cloudquery/issues/17965)) ([d652b81](https://github.com/Infoblox-CTO/cloudquery/commit/d652b81e18a35d122280ee1e59c601d7b1a0e607))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.42.2 ([#18000](https://github.com/Infoblox-CTO/cloudquery/issues/18000)) ([5fc0f46](https://github.com/Infoblox-CTO/cloudquery/commit/5fc0f46ce912a6b5c1d232b405ca6f2a30584461))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.43.0 ([#18014](https://github.com/Infoblox-CTO/cloudquery/issues/18014)) ([20592c8](https://github.com/Infoblox-CTO/cloudquery/commit/20592c8ba2a2da05a6dac60701e821fc0623bf60))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.43.1 ([#18026](https://github.com/Infoblox-CTO/cloudquery/issues/18026)) ([364307c](https://github.com/Infoblox-CTO/cloudquery/commit/364307c5a7e954cc3521498678e3aa658eb4937a))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.44.1 ([#18076](https://github.com/Infoblox-CTO/cloudquery/issues/18076)) ([7cd7012](https://github.com/Infoblox-CTO/cloudquery/commit/7cd70128389844d0221f7dce7102375f8931ef77))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.44.2 ([#18113](https://github.com/Infoblox-CTO/cloudquery/issues/18113)) ([508347b](https://github.com/Infoblox-CTO/cloudquery/commit/508347b8d2168564f69ccb33171f290267647c12))
+* **deps:** Upgrade `github.com/apache/arrow/go` to `v16` ([#17889](https://github.com/Infoblox-CTO/cloudquery/issues/17889)) ([98b2634](https://github.com/Infoblox-CTO/cloudquery/commit/98b2634b1295f0a071acc5146e7672b7d22e316b))
+
 ## [6.0.12](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.0.11...plugins-source-k8s-v6.0.12) (2024-05-30)
 
 
