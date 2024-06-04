@@ -5,6 +5,15 @@
 
 ### Bug Fixes
 
+* **deps:** Update golang.org/x/exp digest to fd00a4e ([#18079](https://github.com/cloudquery/cloudquery/issues/18079)) ([5d90dc1](https://github.com/cloudquery/cloudquery/commit/5d90dc12325327d87e4f422d25f8d75d492f4baf))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.44.1 ([#18076](https://github.com/cloudquery/cloudquery/issues/18076)) ([7cd7012](https://github.com/cloudquery/cloudquery/commit/7cd70128389844d0221f7dce7102375f8931ef77))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.44.2 ([#18113](https://github.com/cloudquery/cloudquery/issues/18113)) ([508347b](https://github.com/cloudquery/cloudquery/commit/508347b8d2168564f69ccb33171f290267647c12))
+
+## [6.0.16](https://github.com/cloudquery/cloudquery/compare/plugins-source-k8s-v6.0.15...plugins-source-k8s-v6.0.16) (2024-05-21)
+
+
+### Bug Fixes
+
 * **deps:** Update golang.org/x/exp digest to fd00a4e ([#18079](https://github.com/Infoblox-CTO/cloudquery/issues/18079)) ([5d90dc1](https://github.com/Infoblox-CTO/cloudquery/commit/5d90dc12325327d87e4f422d25f8d75d492f4baf))
 * **deps:** Update module github.com/cloudquery/cloudquery-api-go to v1.11.3 ([#18094](https://github.com/Infoblox-CTO/cloudquery/issues/18094)) ([821a1bc](https://github.com/Infoblox-CTO/cloudquery/commit/821a1bc04455692579d4cc9714dac61f7a8efcb6))
 * **deps:** Update module github.com/cloudquery/codegen to v0.3.14 ([#17658](https://github.com/Infoblox-CTO/cloudquery/issues/17658)) ([478eb9c](https://github.com/Infoblox-CTO/cloudquery/commit/478eb9c03f764322402703b3975b71b7086a5dea))
