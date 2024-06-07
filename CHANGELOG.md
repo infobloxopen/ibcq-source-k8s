@@ -1,5 +1,17 @@
 # Changelog
 
+## [6.1.0](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.0.17...plugins-source-k8s-v6.1.0) (2024-06-07)
+
+
+### Features
+
+* Remove logging of error events to Sentry in plugins ([#18165](https://github.com/Infoblox-CTO/cloudquery/issues/18165)) ([fc4ff27](https://github.com/Infoblox-CTO/cloudquery/commit/fc4ff27d37f9250b4cf912474073169406cb01fa))
+
+
+### Bug Fixes
+
+* **deps:** Update module github.com/docker/docker to v26.1.3+incompatible ([#18083](https://github.com/Infoblox-CTO/cloudquery/issues/18083)) ([c1c3754](https://github.com/Infoblox-CTO/cloudquery/commit/c1c375447429487083baab6a56b27303890321e7))
+
 ## [6.0.17](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.0.16...plugins-source-k8s-v6.0.17) (2024-06-03)
 
 
