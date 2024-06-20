@@ -1,5 +1,13 @@
 # Changelog
 
+## [6.1.1](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.0...plugins-source-k8s-v6.1.1) (2024-06-20)
+
+
+### Bug Fixes
+
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.45.0 ([#18246](https://github.com/Infoblox-CTO/cloudquery/issues/18246)) ([b462a91](https://github.com/Infoblox-CTO/cloudquery/commit/b462a91c6c260661171b5afc2a0e063202fcde1d))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.45.1 ([#18273](https://github.com/Infoblox-CTO/cloudquery/issues/18273)) ([c54ebbf](https://github.com/Infoblox-CTO/cloudquery/commit/c54ebbfadcaac9f5f9085681dd5e4065b494dc74))
+
 ## [6.1.0](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.0.17...plugins-source-k8s-v6.1.0) (2024-06-07)
 
 
