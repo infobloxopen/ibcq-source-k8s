@@ -1,5 +1,21 @@
 # Changelog
 
+## [6.1.2](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.1...plugins-source-k8s-v6.1.2) (2024-07-08)
+
+
+### Bug Fixes
+
+* Align wording and description with current licensing ([#18371](https://github.com/Infoblox-CTO/cloudquery/issues/18371)) ([ba91d48](https://github.com/Infoblox-CTO/cloudquery/commit/ba91d4823e4a805620650ff0a82ba44387b7d979))
+* **deps:** Update golang.org/x/exp digest to 7f521ea ([#18428](https://github.com/Infoblox-CTO/cloudquery/issues/18428)) ([5d18290](https://github.com/Infoblox-CTO/cloudquery/commit/5d1829066fa91705ea83ecc6d212b7e64704860d))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.45.6 ([#18340](https://github.com/Infoblox-CTO/cloudquery/issues/18340)) ([f284668](https://github.com/Infoblox-CTO/cloudquery/commit/f284668c7912ce7191cc5d70f11135874f7d98c9))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.46.0 ([#18341](https://github.com/Infoblox-CTO/cloudquery/issues/18341)) ([5db9574](https://github.com/Infoblox-CTO/cloudquery/commit/5db9574defbd47b798254dacb1f4e466ccfacf74))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.46.1 ([#18350](https://github.com/Infoblox-CTO/cloudquery/issues/18350)) ([8ff8909](https://github.com/Infoblox-CTO/cloudquery/commit/8ff89094c231abfbc1cec38f8901a546139f2d01))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.47.0 ([#18351](https://github.com/Infoblox-CTO/cloudquery/issues/18351)) ([9c5bbdc](https://github.com/Infoblox-CTO/cloudquery/commit/9c5bbdccebdc2c65df491f70f76483aa0bb1c533))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.47.1 ([#18352](https://github.com/Infoblox-CTO/cloudquery/issues/18352)) ([b31812a](https://github.com/Infoblox-CTO/cloudquery/commit/b31812a821233cffa2b9bbc6a7644797f380fa82))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.48.0 ([#18363](https://github.com/Infoblox-CTO/cloudquery/issues/18363)) ([61baf97](https://github.com/Infoblox-CTO/cloudquery/commit/61baf97d1704878dcb129be56bd6457109b1719a))
+* **deps:** Update module github.com/cloudquery/plugin-sdk/v4 to v4.49.0 ([#18415](https://github.com/Infoblox-CTO/cloudquery/issues/18415)) ([3f4ef53](https://github.com/Infoblox-CTO/cloudquery/commit/3f4ef5366078eebd38ab7c1cc52afc0eaeee08f4))
+* **deps:** Update module github.com/hashicorp/go-retryablehttp to v0.7.7 [SECURITY] ([#18369](https://github.com/Infoblox-CTO/cloudquery/issues/18369)) ([1e223bf](https://github.com/Infoblox-CTO/cloudquery/commit/1e223bf58529449ab7b30d1a0d046a40a0488cf1))
+
 ## [6.1.1](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.0...plugins-source-k8s-v6.1.1) (2024-06-20)
 
 
