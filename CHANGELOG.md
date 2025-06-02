@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.1.3](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.2...plugins-source-k8s-v6.1.3) (2025-06-02)
+
+
+### Bug Fixes
+
+* findStsEnabledRegion function in case of errors other than InvalidClientTokenId occur ([#358](https://github.com/Infoblox-CTO/cloudquery/issues/358)) ([118eeef](https://github.com/Infoblox-CTO/cloudquery/commit/118eeef3a3213a7c83985748867a7a51ce839ac0))
+
 ## [6.1.2](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.1...plugins-source-k8s-v6.1.2) (2024-07-08)
 
 
