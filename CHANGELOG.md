@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.1.4](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.3...plugins-source-k8s-v6.1.4) (2025-09-08)
+
+
+### Bug Fixes
+
+* **deps:** Update AWS modules with IMDS V2 fix ([#411](https://github.com/Infoblox-CTO/cloudquery/issues/411)) ([b40193e](https://github.com/Infoblox-CTO/cloudquery/commit/b40193e8663e0e1e21cf5e82e97b28b37560b07f))
+
 ## [6.1.3](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.2...plugins-source-k8s-v6.1.3) (2025-06-02)
 
 
