@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.1.5](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.4...plugins-source-k8s-v6.1.5) (2026-01-19)
+
+
+### Bug Fixes
+
+* **azure:** Security update for github.com/golang-jwt/jwt/v5 ([#457](https://github.com/Infoblox-CTO/cloudquery/issues/457)) ([3d52e07](https://github.com/Infoblox-CTO/cloudquery/commit/3d52e078c6bdee93d8534ba91f2a7fd06e76d214))
+
 ## [6.1.4](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.3...plugins-source-k8s-v6.1.4) (2025-09-08)
 
 
