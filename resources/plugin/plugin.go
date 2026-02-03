@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"strings"
 
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/client"
@@ -105,7 +105,7 @@ func (c *Client) Tables(_ context.Context, options plugin.TableOptions) (schema.
 
 func (c *Client) Sync(ctx context.Context, options plugin.SyncOptions, res chan<- message.SyncMessage) error {
 	if c.options.NoConnection {
-		return fmt.Errorf("no connection")
+		return errors.New("no connection")
 	}
 	tables, err := c.allTables.FilterDfs(options.Tables, options.SkipTables, options.SkipDependentTables)
 	if err != nil {

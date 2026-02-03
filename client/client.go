@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -91,7 +92,7 @@ func Configure(ctx context.Context, logger zerolog.Logger, s spec.Spec) (schema.
 		return nil, err
 	}
 	if len(contexts) == 0 {
-		return nil, fmt.Errorf("could not find any context. Try to add context, https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-context-and-configuration")
+		return nil, errors.New("could not find any context. Try to add context, https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-context-and-configuration")
 	}
 
 	c := Client{
