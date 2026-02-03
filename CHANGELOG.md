@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.1.6](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.5...plugins-source-k8s-v6.1.6) (2026-02-03)
+
+
+### Bug Fixes
+
+* Patch vulns in k8s plugin dependencies ([#467](https://github.com/Infoblox-CTO/cloudquery/issues/467)) ([c10f102](https://github.com/Infoblox-CTO/cloudquery/commit/c10f102418fbd81f6f0db28262a8057f8a9bfe4c))
+
 ## [6.1.5](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.4...plugins-source-k8s-v6.1.5) (2026-01-19)
 
 
