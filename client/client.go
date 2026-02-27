@@ -65,6 +65,10 @@ func (c *Client) DynamicClient() dynamic.Interface {
 	return c.dynamicClients[c.Context]
 }
 
+func (c *Client) Spec() *spec.Spec {
+	return c.spec
+}
+
 func (c *Client) Namespaces() []v1.Namespace {
 	return c.namespaces[c.Context]
 }
