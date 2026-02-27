@@ -24,9 +24,7 @@ func CustomResources() *schema.Table {
 		Name:      "k8s_custom_resources",
 		Resolver:  fetchCustomResources,
 		Multiplex: client.ContextMultiplex,
-		Transform: transformers.TransformWithStruct(&CustomResourceRow{},
-			transformers.WithPrimaryKeys("context", "gvk", "namespace", "name"),
-		),
+		Transform: transformers.TransformWithStruct(&CustomResourceRow{}),
 		Columns: schema.ColumnList{
 			client.ContextColumn,
 			{
