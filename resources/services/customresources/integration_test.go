@@ -18,7 +18,7 @@ func TestFetchCustomResources_NoConfiguration(t *testing.T) {
 		Concurrency:     1000,
 		CustomResources: []spec.CustomResourceSpec{},
 	}
-	
+
 	assert.Empty(t, s.CustomResources, "Should have no custom resources configured")
 }
 
@@ -50,7 +50,7 @@ func TestFetchCustomResources_InvalidGVK(t *testing.T) {
 			expectErr: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := parseGVKToGVR(tt.gvk)
@@ -82,52 +82,52 @@ func TestUnstructuredObjectCreation(t *testing.T) {
 			"description": "Production certificate",
 		})
 		obj.SetCreationTimestamp(metav1.Time{Time: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)})
-		
+
 		obj.Object["spec"] = map[string]interface{}{
 			"secretName": "my-cert-tls",
 			"dnsNames":   []interface{}{"example.com"},
 		}
-		
+
 		obj.Object["status"] = map[string]interface{}{
 			"ready": true,
 		}
-		
+
 		// Validate object structure
 		assert.Equal(t, "my-cert", obj.GetName())
 		assert.Equal(t, "default", obj.GetNamespace())
 		assert.Equal(t, int64(2), obj.GetGeneration())
-		
+
 		labels := obj.GetLabels()
 		assert.Equal(t, "my-app", labels["app"])
-		
+
 		spec, found, err := unstructured.NestedMap(obj.Object, "spec")
 		require.NoError(t, err)
 		require.True(t, found)
 		assert.Equal(t, "my-cert-tls", spec["secretName"])
 	})
-	
+
 	t.Run("cluster_scoped_resource", func(t *testing.T) {
 		obj := &unstructured.Unstructured{}
 		obj.SetName("letsencrypt-prod")
 		obj.SetUID("issuer-98765")
 		obj.SetGeneration(1)
-		
+
 		obj.Object["spec"] = map[string]interface{}{
 			"acme": map[string]interface{}{
 				"server": "https://acme-v02.api.letsencrypt.org/directory",
 			},
 		}
-		
+
 		assert.Equal(t, "letsencrypt-prod", obj.GetName())
 		assert.Empty(t, obj.GetNamespace(), "Cluster-scoped resources should have empty namespace")
 	})
-	
+
 	t.Run("resource_with_empty_fields", func(t *testing.T) {
 		obj := &unstructured.Unstructured{}
 		obj.SetName("sample-resource")
 		obj.SetNamespace("test")
 		obj.SetUID("sample-123")
-		
+
 		assert.Equal(t, "sample-resource", obj.GetName())
 		assert.Empty(t, obj.GetLabels())
 		assert.Empty(t, obj.GetAnnotations())
@@ -161,14 +161,14 @@ func TestNamespaceFiltering(t *testing.T) {
 			expectedNamespaces: 1,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			crSpec := spec.CustomResourceSpec{
 				GVK:        "cert-manager.io/v1/Certificate",
 				Namespaces: tt.configuredNS,
 			}
-			
+
 			if len(crSpec.Namespaces) == 0 {
 				assert.True(t, tt.shouldFetchAll)
 			} else {
@@ -181,14 +181,14 @@ func TestNamespaceFiltering(t *testing.T) {
 // TestTableRegistration verifies the custom resources table is properly registered
 func TestTableRegistration(t *testing.T) {
 	table := CustomResources()
-	
+
 	require.NotNil(t, table)
 	assert.Equal(t, "k8s_custom_resources", table.Name)
 	assert.NotNil(t, table.Resolver)
 	assert.NotNil(t, table.Multiplex)
-	
+
 	assert.Greater(t, len(table.Columns), 10, "Should have at least 11 columns")
-	
+
 	keyColumns := []string{"gvk", "namespace", "name", "uid", "spec", "status"}
 	for _, col := range keyColumns {
 		found := false
@@ -209,7 +209,7 @@ func TestComplexDataStructures(t *testing.T) {
 	obj.SetNamespace("default")
 	obj.SetUID("complex-123")
 	obj.SetCreationTimestamp(metav1.Time{Time: time.Now()})
-	
+
 	obj.Object["spec"] = map[string]interface{}{
 		"nested": map[string]interface{}{
 			"field1": "value1",
@@ -220,23 +220,23 @@ func TestComplexDataStructures(t *testing.T) {
 			},
 		},
 	}
-	
+
 	obj.SetLabels(map[string]string{
 		"key1": "value1",
 		"key2": "value2",
 	})
-	
+
 	spec, found, err := unstructured.NestedMap(obj.Object, "spec")
 	require.NoError(t, err)
 	require.True(t, found)
-	
+
 	nested, found, err := unstructured.NestedMap(spec, "nested")
 	require.NoError(t, err)
 	require.True(t, found)
-	
+
 	assert.Equal(t, "value1", nested["field1"])
 	assert.Equal(t, int64(42), nested["field2"])
-	
+
 	labels := obj.GetLabels()
 	assert.Equal(t, "value1", labels["key1"])
 }
@@ -252,13 +252,13 @@ func TestConfigurationExamples(t *testing.T) {
 				},
 			},
 		}
-		
+
 		s.SetDefaults()
 		err := s.Validate()
 		require.NoError(t, err)
 		assert.Len(t, s.CustomResources, 1)
 	})
-	
+
 	t.Run("multiple_custom_resources", func(t *testing.T) {
 		s := &spec.Spec{
 			CustomResources: []spec.CustomResourceSpec{
@@ -275,7 +275,7 @@ func TestConfigurationExamples(t *testing.T) {
 				},
 			},
 		}
-		
+
 		s.SetDefaults()
 		err := s.Validate()
 		require.NoError(t, err)
