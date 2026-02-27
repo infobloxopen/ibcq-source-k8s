@@ -189,8 +189,8 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 		validate  func(*testing.T, *CustomResourceRow)
 	}{
 		{
-			name: "complete_certificate_object",
-			gvk:  "cert-manager.io/v1/Certificate",
+			name:    "complete_certificate_object",
+			gvk:     "cert-manager.io/v1/Certificate",
 			context: "test-context",
 			setupObj: func() *unstructured.Unstructured {
 				obj := &unstructured.Unstructured{}
@@ -204,7 +204,7 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 				obj.SetLabels(map[string]string{"app": "test", "env": "dev"})
 				obj.SetAnnotations(map[string]string{"description": "test certificate"})
 				obj.SetCreationTimestamp(metav1.Time{Time: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)})
-				
+
 				obj.Object["spec"] = map[string]interface{}{
 					"secretName": "test-secret",
 					"dnsNames":   []interface{}{"example.com"},
@@ -231,8 +231,8 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 			},
 		},
 		{
-			name: "cluster_scoped_resource",
-			gvk:  "storage.k8s.io/v1/StorageClass",
+			name:    "cluster_scoped_resource",
+			gvk:     "storage.k8s.io/v1/StorageClass",
 			context: "test-context",
 			setupObj: func() *unstructured.Unstructured {
 				obj := &unstructured.Unstructured{}
@@ -241,7 +241,7 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 				obj.SetResourceVersion("v2")
 				obj.SetGeneration(2)
 				obj.SetCreationTimestamp(metav1.Time{Time: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)})
-				
+
 				obj.Object["spec"] = map[string]interface{}{
 					"provisioner": "fast.io",
 				}
@@ -255,8 +255,8 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 			},
 		},
 		{
-			name: "minimal_object_no_spec_status",
-			gvk:  "example.com/v1/Sample",
+			name:    "minimal_object_no_spec_status",
+			gvk:     "example.com/v1/Sample",
 			context: "test-context",
 			setupObj: func() *unstructured.Unstructured {
 				obj := &unstructured.Unstructured{}
@@ -276,8 +276,8 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 			},
 		},
 		{
-			name: "nil_object",
-			gvk:  "example.com/v1/Sample",
+			name:    "nil_object",
+			gvk:     "example.com/v1/Sample",
 			context: "test-context",
 			setupObj: func() *unstructured.Unstructured {
 				return nil
@@ -289,13 +289,13 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			obj := tt.setupObj()
-			
+
 			if tt.expectErr {
 				// For error cases (like nil object), just verify it's nil
 				assert.Nil(t, obj)
 				return
 			}
-			
+
 			// For non-error tests, verify object is created correctly
 			assert.NotNil(t, obj)
 		})
@@ -304,4 +304,3 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 
 // Note: Full integration tests for convertToCustomResourceRow will be in Phase 5
 // These unit tests verify the table structure and helper functions
-

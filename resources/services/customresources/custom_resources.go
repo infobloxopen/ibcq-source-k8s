@@ -12,10 +12,10 @@ import (
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/client/spec"
 	"github.com/cloudquery/plugin-sdk/v4/schema"
 	"github.com/cloudquery/plugin-sdk/v4/transformers"
-	"k8s.io/client-go/dynamic"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	metav1schema "k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 )
 
 // CustomResources returns the table definition for k8s_custom_resources
@@ -118,7 +118,7 @@ type CustomResourceRow struct {
 // fetchCustomResources retrieves custom resources based on plugin configuration
 func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *schema.Resource, res chan<- any) error {
 	cl := meta.(*client.Client)
-	
+
 	// Get custom resources from configuration
 	spec := cl.Spec()
 	if spec == nil || len(spec.CustomResources) == 0 {
@@ -192,7 +192,7 @@ func fetchResourcesByGVR(ctx context.Context, cl *client.Client, gvk string, gvr
 // fetchFromNamespace handles pagination and fetching from a specific namespace (or all if empty)
 func fetchFromNamespace(ctx context.Context, cl *client.Client, resourceClient dynamic.ResourceInterface, gvk string, res chan<- any) error {
 	opts := metav1.ListOptions{}
-	
+
 	for {
 		list, err := resourceClient.List(ctx, opts)
 		if err != nil {
