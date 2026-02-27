@@ -1,10 +1,10 @@
 package spec
 
 import (
+	_ "embed"
 	"fmt"
 	"regexp"
 	"strings"
-	_ "embed"
 )
 
 // CloudQuery Kubernetes source plugin config spec.
