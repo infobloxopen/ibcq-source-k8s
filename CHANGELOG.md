@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Features
+
+* **custom-resources:** Add support for collecting arbitrary Kubernetes Custom Resources ([#XXX](https://github.com/Infoblox-CTO/cloudquery/issues/XXX))
+  - New `k8s_custom_resources` table for storing custom resources
+  - Configure custom resources via `custom_resources` in spec with GVK format `"group/version/kind"`
+  - Supports namespace filtering for selective collection
+  - Dynamic client integration for arbitrary CRs
+  - JSON encoding for spec and status fields enables SQL querying
+  - Comprehensive validation for GVK format and configuration
+  - Includes examples for common CRs: cert-manager, ArgoCD, Istio, Prometheus Operator
+  - Full documentation in `docs/tables/k8s_custom_resources.md`
+
 ## [6.1.6](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.5...plugins-source-k8s-v6.1.6) (2026-02-03)
 
 
