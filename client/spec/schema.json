@@ -25,11 +25,39 @@
           "minimum": 1,
           "description": "The best effort maximum number of Go routines to use.\nLower this number to reduce memory usage.",
           "default": 50000
+        },
+        "custom_resources": {
+          "items": {
+            "$ref": "#/$defs/CustomResourceSpec"
+          },
+          "type": "array",
+          "description": "List of Custom Resources to sync. Each custom resource is identified by its Group/Version/Kind (GVK).\n\nNote: Core Kubernetes resources (e.g., Pods, Services) are not supported and have dedicated tables."
         }
       },
       "additionalProperties": false,
       "type": "object",
       "description": "CloudQuery Kubernetes source plugin config spec."
+    },
+    "CustomResourceSpec": {
+      "properties": {
+        "gvk": {
+          "type": "string",
+          "pattern": "^[a-z0-9.-]+/[a-z0-9]+/[A-Z][a-zA-Z0-9]*$",
+          "description": "Group/Version/Kind of the custom resource in the format 'group/version/Kind'.\n\nExamples:\n- cert-manager.io/v1/Certificate\n- argoproj.io/v1alpha1/Application\n\nNote: Core resources with empty group (e.g., /v1/Pod) are not supported."
+        },
+        "namespaces": {
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": "array",
+          "description": "Optional list of namespaces to filter resources. If not specified, resources from all namespaces will be synced.\n\nExamples: [\"default\", \"production\", \"staging\"]"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["gvk"],
+      "description": "Specification for a Kubernetes Custom Resource to sync."
     }
   }
 }
