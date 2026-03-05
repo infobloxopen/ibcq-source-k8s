@@ -187,19 +187,24 @@ func TestTableRegistration(t *testing.T) {
 	assert.NotNil(t, table.Resolver)
 	assert.NotNil(t, table.Multiplex)
 
-	assert.Greater(t, len(table.Columns), 10, "Should have at least 11 columns")
+	// Verify Transform is configured (generates columns from struct)
+	assert.NotNil(t, table.Transform, "Transform should be configured")
 
-	keyColumns := []string{"gvk", "namespace", "name", "uid", "spec", "status"}
-	for _, col := range keyColumns {
-		found := false
-		for _, tableCol := range table.Columns {
-			if tableCol.Name == col {
-				found = true
-				break
-			}
+	// Verify context column is manually added
+	assert.Greater(t, len(table.Columns), 0, "Should have at least context column")
+
+	contextFound := false
+	for _, tableCol := range table.Columns {
+		if tableCol.Name == "context" {
+			contextFound = true
+			break
 		}
-		assert.True(t, found, "Column %q should exist", col)
 	}
+	assert.True(t, contextFound, "Context column should be manually added")
+
+	// Note: Other columns (api_version, kind, namespace, name, uid, labels, annotations,
+	// owner_references, finalizers, spec, status) are generated from CustomResourceRow struct
+	// by transformers.WithStruct during table transformation
 }
 
 // TestComplexDataStructures validates handling of nested JSON structures

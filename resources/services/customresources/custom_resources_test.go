@@ -1,10 +1,12 @@
 package customresources
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/apache/arrow/go/v16/arrow"
+	"github.com/cloudquery/cloudquery/plugins/source/k8s/client"
 	"github.com/cloudquery/plugin-sdk/v4/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,21 +27,15 @@ func TestCustomResources_TableStructure(t *testing.T) {
 	// Verify multiplex is set
 	assert.NotNil(t, table.Multiplex)
 
-	// Verify required columns exist
+	// Verify required columns exist - columns come from transformers.WithStruct
+	// We only manually add context column, rest are from CustomResourceRow struct
 	requiredColumns := []string{
 		"context",
-		"gvk",
-		"namespace",
-		"name",
-		"uid",
-		"resource_version",
-		"generation",
-		"labels",
-		"annotations",
-		"created_at",
-		"spec",
-		"status",
 	}
+
+	// Note: With transformers.WithStruct, columns are generated from the struct fields:
+	// api_version, kind, namespace, name, uid, labels, annotations,
+	// owner_references, finalizers, spec, status
 
 	for _, colName := range requiredColumns {
 		found := false
@@ -56,31 +52,23 @@ func TestCustomResources_TableStructure(t *testing.T) {
 func TestCustomResources_ColumnTypes(t *testing.T) {
 	table := CustomResources()
 
-	tests := []struct {
-		columnName   string
-		expectedType arrow.DataType
-	}{
-		{"gvk", arrow.BinaryTypes.String},
-		{"namespace", arrow.BinaryTypes.String},
-		{"name", arrow.BinaryTypes.String},
-		{"uid", arrow.BinaryTypes.String},
-		{"generation", arrow.PrimitiveTypes.Int64},
-		{"created_at", arrow.FixedWidthTypes.Timestamp_us},
+	// Verify context column is manually added
+	var contextCol *schema.Column
+	for i := range table.Columns {
+		if table.Columns[i].Name == "context" {
+			contextCol = &table.Columns[i]
+			break
+		}
 	}
+	require.NotNil(t, contextCol, "Column 'context' should be manually added")
+	assert.Equal(t, arrow.BinaryTypes.String, contextCol.Type)
 
-	for _, tt := range tests {
-		t.Run(tt.columnName, func(t *testing.T) {
-			var col *schema.Column
-			for i := range table.Columns {
-				if table.Columns[i].Name == tt.columnName {
-					col = &table.Columns[i]
-					break
-				}
-			}
-			require.NotNil(t, col, "Column %q not found", tt.columnName)
-			assert.Equal(t, tt.expectedType, col.Type, "Column %q should have type %v", tt.columnName, tt.expectedType)
-		})
-	}
+	// Verify Transform is configured (this generates columns from struct)
+	assert.NotNil(t, table.Transform, "Transform should be configured with WithStruct")
+
+	// Note: Other columns (api_version, kind, namespace, name, uid, labels, annotations,
+	// owner_references, finalizers, spec, status) are automatically generated from
+	// CustomResourceRow struct by transformers.WithStruct
 }
 
 func TestParseGVKToGVR(t *testing.T) {
@@ -146,26 +134,34 @@ func TestParseGVKToGVR(t *testing.T) {
 func TestCustomResourceRow_Structure(t *testing.T) {
 	// Verify CustomResourceRow has all required fields
 	row := CustomResourceRow{
-		Context:         "test-context",
-		GVK:             "cert-manager.io/v1/Certificate",
-		Namespace:       "default",
-		Name:            "test-cert",
-		UID:             "12345",
-		ResourceVersion: "v1",
-		Generation:      1,
-		Labels:          `{"app":"test"}`,
-		Annotations:     `{"description":"test"}`,
-		CreatedAt:       "2024-01-01T00:00:00Z",
-		Spec:            `{"secretName":"test-secret"}`,
-		Status:          `{"ready":true}`,
+		Context:     "test-context",
+		APIVersion:  "cert-manager.io/v1",
+		Kind:        "Certificate",
+		Namespace:   "default",
+		Name:        "test-cert",
+		UID:         "12345",
+		Labels:      map[string]string{"app": "test"},
+		Annotations: map[string]string{"description": "test"},
+		Finalizers:  []string{"finalizer.example.com"},
+		OwnerReferences: []any{map[string]interface{}{
+			"kind": "Certificate",
+			"name": "parent-cert",
+		}},
+		Spec:   map[string]any{"secretName": "test-secret"},
+		Status: map[string]any{"ready": true},
 	}
 
 	// Verify fields are accessible
 	assert.Equal(t, "test-context", row.Context)
-	assert.Equal(t, "cert-manager.io/v1/Certificate", row.GVK)
+	assert.Equal(t, "cert-manager.io/v1", row.APIVersion)
+	assert.Equal(t, "Certificate", row.Kind)
 	assert.Equal(t, "default", row.Namespace)
 	assert.Equal(t, "test-cert", row.Name)
-	assert.Equal(t, int64(1), row.Generation)
+	assert.Equal(t, "12345", row.UID)
+	assert.NotNil(t, row.Labels)
+	assert.NotNil(t, row.Annotations)
+	assert.NotNil(t, row.Spec)
+	assert.NotNil(t, row.Status)
 }
 
 func TestCustomResources_PrimaryKeys(t *testing.T) {
@@ -174,8 +170,8 @@ func TestCustomResources_PrimaryKeys(t *testing.T) {
 	// Verify table has Transform configured
 	assert.NotNil(t, table.Transform)
 
-	// The primary keys are: context, gvk, namespace, name
-	// This test verifies the table is properly configured for these keys
+	// The primary key is uid (with deterministic _cq_id)
+	// This test verifies the table is properly configured with WithPrimaryKeys("UID")
 	// Actual validation happens during TransformTables in the plugin
 }
 
@@ -217,17 +213,16 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 			expectErr: false,
 			validate: func(t *testing.T, row *CustomResourceRow) {
 				assert.Equal(t, "test-context", row.Context)
-				assert.Equal(t, "cert-manager.io/v1/Certificate", row.GVK)
+				assert.Equal(t, "cert-manager.io/v1", row.APIVersion)
+				assert.Equal(t, "Certificate", row.Kind)
 				assert.Equal(t, "default", row.Namespace)
 				assert.Equal(t, "test-cert", row.Name)
 				assert.Equal(t, "12345-abcde", row.UID)
-				assert.Equal(t, "v1", row.ResourceVersion)
-				assert.Equal(t, int64(1), row.Generation)
-				assert.Contains(t, row.Labels, "app")
-				assert.Contains(t, row.Annotations, "description")
-				assert.Contains(t, row.Spec, "secretName")
-				assert.Contains(t, row.Status, "ready")
-				assert.NotEmpty(t, row.CreatedAt)
+				assert.Equal(t, "test", row.Labels["app"])
+				assert.Equal(t, "dev", row.Labels["env"])
+				assert.Equal(t, "test certificate", row.Annotations["description"])
+				assert.Equal(t, "test-secret", row.Spec["secretName"])
+				assert.Equal(t, true, row.Status["ready"])
 			},
 		},
 		{
@@ -236,6 +231,8 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 			context: "test-context",
 			setupObj: func() *unstructured.Unstructured {
 				obj := &unstructured.Unstructured{}
+				obj.SetAPIVersion("storage.k8s.io/v1")
+				obj.SetKind("StorageClass")
 				obj.SetName("fast-storage")
 				obj.SetUID("cluster-12345")
 				obj.SetResourceVersion("v2")
@@ -249,9 +246,12 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 			},
 			expectErr: false,
 			validate: func(t *testing.T, row *CustomResourceRow) {
+				assert.Equal(t, "storage.k8s.io/v1", row.APIVersion)
+				assert.Equal(t, "StorageClass", row.Kind)
 				assert.Equal(t, "fast-storage", row.Name)
 				assert.Empty(t, row.Namespace) // cluster-scoped
-				assert.Equal(t, int64(2), row.Generation)
+				assert.NotNil(t, row.Spec)
+				assert.Equal(t, "fast.io", row.Spec["provisioner"])
 			},
 		},
 		{
@@ -260,6 +260,8 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 			context: "test-context",
 			setupObj: func() *unstructured.Unstructured {
 				obj := &unstructured.Unstructured{}
+				obj.SetAPIVersion("example.com/v1")
+				obj.SetKind("Sample")
 				obj.SetName("minimal")
 				obj.SetNamespace("default")
 				obj.SetUID("minimal-123")
@@ -269,10 +271,12 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 			expectErr: false,
 			validate: func(t *testing.T, row *CustomResourceRow) {
 				assert.Equal(t, "minimal", row.Name)
-				assert.Equal(t, "{}", row.Spec)   // Empty JSON for missing spec
-				assert.Equal(t, "{}", row.Status) // Empty JSON for missing status
-				assert.Equal(t, "{}", row.Labels)
-				assert.Equal(t, "{}", row.Annotations)
+				assert.Equal(t, "example.com/v1", row.APIVersion)
+				assert.Equal(t, "Sample", row.Kind)
+				assert.Nil(t, row.Spec)        // nil for missing spec
+				assert.Nil(t, row.Status)      // nil for missing status
+				assert.Nil(t, row.Labels)      // nil for missing labels
+				assert.Nil(t, row.Annotations) // nil for missing annotations
 			},
 		},
 		{
@@ -284,6 +288,39 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 			},
 			expectErr: true,
 		},
+		{
+			name:    "object_with_owner_references_and_finalizers",
+			gvk:     "apps/v1/ReplicaSet",
+			context: "test-context",
+			setupObj: func() *unstructured.Unstructured {
+				obj := &unstructured.Unstructured{}
+				obj.SetAPIVersion("apps/v1")
+				obj.SetKind("ReplicaSet")
+				obj.SetName("test-rs")
+				obj.SetNamespace("default")
+				obj.SetUID("rs-12345")
+				obj.SetOwnerReferences([]metav1.OwnerReference{
+					{
+						APIVersion: "apps/v1",
+						Kind:       "Deployment",
+						Name:       "parent-deployment",
+						UID:        "deploy-123",
+					},
+				})
+				obj.SetFinalizers([]string{"finalizer.example.com", "cleanup.example.com"})
+				return obj
+			},
+			expectErr: false,
+			validate: func(t *testing.T, row *CustomResourceRow) {
+				assert.Equal(t, "test-rs", row.Name)
+				assert.NotNil(t, row.OwnerReferences)
+				assert.Len(t, row.OwnerReferences, 1)
+				assert.NotNil(t, row.Finalizers)
+				assert.Len(t, row.Finalizers, 2)
+				assert.Contains(t, row.Finalizers, "finalizer.example.com")
+				assert.Contains(t, row.Finalizers, "cleanup.example.com")
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -291,13 +328,24 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 			obj := tt.setupObj()
 
 			if tt.expectErr {
-				// For error cases (like nil object), just verify it's nil
-				assert.Nil(t, obj)
+				// For error cases (like nil object), test the conversion
+				mockClient := &client.Client{Context: tt.context}
+				row, err := convertToCustomResourceRow(context.Background(), mockClient, tt.gvk, obj)
+				assert.Error(t, err)
+				assert.Nil(t, row)
 				return
 			}
 
-			// For non-error tests, verify object is created correctly
+			// For non-error tests, convert and validate
 			assert.NotNil(t, obj)
+			mockClient := &client.Client{Context: tt.context}
+			row, err := convertToCustomResourceRow(context.Background(), mockClient, tt.gvk, obj)
+			assert.NoError(t, err)
+			assert.NotNil(t, row)
+
+			if tt.validate != nil {
+				tt.validate(t, row)
+			}
 		})
 	}
 }

@@ -2,31 +2,31 @@
 
 This table shows custom Kubernetes resources based on your configuration. Unlike core Kubernetes resources (pods, services, etc.) which have dedicated tables, this table allows you to sync any Custom Resource Definition (CRD) installed in your cluster.
 
-## Primary Keys 
+## Primary Key
 
-- `context`
-- `gvk` 
-- `namespace`
-- `name`
+- `uid` (when write_mode is `overwrite` or `overwrite-delete-stale`)
+- No primary key when write_mode is `append`
+
+**Note**: When using `overwrite` or `overwrite-delete-stale` mode, a unique constraint is also created on `_cq_id`. The `_cq_id` is deterministically generated from the `uid` primary key.
 
 ## Columns
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| _cq_id | UUID | CloudQuery internal ID |
+| _cq_id | UUID | CloudQuery internal ID (deterministic hash of uid; unique constraint when write_mode is overwrite or overwrite-delete-stale) |
 | _cq_parent_id | UUID | CloudQuery internal parent ID |
 | context | String | Kubernetes context name |
-| gvk | String | GroupVersionKind in format 'group/version/kind' |
+| api_version | String | API version (group/version, e.g., "cert-manager.io/v1") |
+| kind | String | Resource kind (e.g., "Certificate") |
 | namespace | String | Namespace of the resource. Empty for cluster-scoped resources |
 | name | String | Name of the resource |
-| uid | String | Unique identifier for the resource |
-| resource_version | String | Resource version for optimistic concurrency |
-| generation | Int64 | Generation number for spec updates |
-| labels | String | Labels as JSON string |
-| annotations | String | Annotations as JSON string |
-| created_at | Timestamp | Creation timestamp |
-| spec | String | Resource spec as JSON string |
-| status | String | Resource status as JSON string |
+| uid | String | Unique identifier for the resource (primary key when write_mode is overwrite or overwrite-delete-stale) |
+| labels | JSON | Resource labels (stored as jsonb in PostgreSQL) |
+| annotations | JSON | Resource annotations (stored as jsonb in PostgreSQL) |
+| owner_references | JSON | Owner references (stored as jsonb in PostgreSQL) |
+| finalizers | List\<String\> | Resource finalizers |
+| spec | JSON | Resource specification (stored as jsonb in PostgreSQL) |
+| status | JSON | Resource status (stored as jsonb in PostgreSQL) |
 
 ## Configuration
 

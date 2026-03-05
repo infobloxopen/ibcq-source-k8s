@@ -2,12 +2,9 @@ package customresources
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/apache/arrow/go/v16/arrow"
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/client"
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/client/spec"
 	"github.com/cloudquery/plugin-sdk/v4/schema"
@@ -24,93 +21,25 @@ func CustomResources() *schema.Table {
 		Name:      "k8s_custom_resources",
 		Resolver:  fetchCustomResources,
 		Multiplex: client.ContextMultiplex,
-		Transform: transformers.TransformWithStruct(&CustomResourceRow{}),
-		Columns: schema.ColumnList{
-			client.ContextColumn,
-			{
-				Name:        "gvk",
-				Type:        arrow.BinaryTypes.String,
-				Description: "GroupVersionKind in format 'group/version/kind'",
-				Resolver:    schema.PathResolver("GVK"),
-			},
-			{
-				Name:        "namespace",
-				Type:        arrow.BinaryTypes.String,
-				Description: "Namespace of the resource. Empty for cluster-scoped resources.",
-				Resolver:    schema.PathResolver("Namespace"),
-			},
-			{
-				Name:        "name",
-				Type:        arrow.BinaryTypes.String,
-				Description: "Name of the resource",
-				Resolver:    schema.PathResolver("Name"),
-			},
-			{
-				Name:        "uid",
-				Type:        arrow.BinaryTypes.String,
-				Description: "Unique identifier for the resource",
-				Resolver:    schema.PathResolver("UID"),
-			},
-			{
-				Name:        "resource_version",
-				Type:        arrow.BinaryTypes.String,
-				Description: "Resource version for optimistic concurrency",
-				Resolver:    schema.PathResolver("ResourceVersion"),
-			},
-			{
-				Name:        "generation",
-				Type:        arrow.PrimitiveTypes.Int64,
-				Description: "Generation number for spec updates",
-				Resolver:    schema.PathResolver("Generation"),
-			},
-			{
-				Name:        "labels",
-				Type:        arrow.BinaryTypes.String,
-				Description: "Labels as JSON string",
-				Resolver:    schema.PathResolver("Labels"),
-			},
-			{
-				Name:        "annotations",
-				Type:        arrow.BinaryTypes.String,
-				Description: "Annotations as JSON string",
-				Resolver:    schema.PathResolver("Annotations"),
-			},
-			{
-				Name:        "created_at",
-				Type:        arrow.FixedWidthTypes.Timestamp_us,
-				Description: "Creation timestamp",
-				Resolver:    schema.PathResolver("CreatedAt"),
-			},
-			{
-				Name:        "spec",
-				Type:        arrow.BinaryTypes.String,
-				Description: "Resource spec as JSON string",
-				Resolver:    schema.PathResolver("Spec"),
-			},
-			{
-				Name:        "status",
-				Type:        arrow.BinaryTypes.String,
-				Description: "Resource status as JSON string",
-				Resolver:    schema.PathResolver("Status"),
-			},
-		},
+		Transform: transformers.TransformWithStruct(&CustomResourceRow{}, transformers.WithPrimaryKeys("UID")),
+		Columns:   schema.ColumnList{client.ContextColumn},
 	}
 }
 
 // CustomResourceRow represents a single custom resource in the table
 type CustomResourceRow struct {
-	Context         string `json:"context"`
-	GVK             string `json:"gvk"`
-	Namespace       string `json:"namespace"`
-	Name            string `json:"name"`
-	UID             string `json:"uid"`
-	ResourceVersion string `json:"resource_version"`
-	Generation      int64  `json:"generation"`
-	Labels          string `json:"labels"`           // JSON-encoded map
-	Annotations     string `json:"annotations"`      // JSON-encoded map
-	CreatedAt       string `json:"created_at"`       // ISO 8601 timestamp
-	Spec            string `json:"spec"`             // JSON-encoded spec
-	Status          string `json:"status,omitempty"` // JSON-encoded status
+	Context         string            `json:"context"`
+	APIVersion      string            `json:"api_version"`
+	Kind            string            `json:"kind"`
+	Namespace       string            `json:"namespace"`
+	Name            string            `json:"name"`
+	UID             string            `json:"uid"`
+	Labels          map[string]string `json:"labels"`
+	Annotations     map[string]string `json:"annotations"`
+	OwnerReferences []any             `json:"owner_references"`
+	Finalizers      []string          `json:"finalizers"`
+	Spec            map[string]any    `json:"spec"`
+	Status          map[string]any    `json:"status,omitempty"`
 }
 
 // fetchCustomResources retrieves custom resources based on plugin configuration
@@ -223,66 +152,48 @@ func convertToCustomResourceRow(ctx context.Context, cl *client.Client, gvk stri
 	}
 
 	row := &CustomResourceRow{
-		Context:         cl.Context,
-		GVK:             gvk,
-		Namespace:       obj.GetNamespace(),
-		Name:            obj.GetName(),
-		UID:             string(obj.GetUID()),
-		ResourceVersion: obj.GetResourceVersion(),
-		Generation:      obj.GetGeneration(),
+		Context:    cl.Context,
+		APIVersion: obj.GetAPIVersion(),
+		Kind:       obj.GetKind(),
+		Namespace:  obj.GetNamespace(),
+		Name:       obj.GetName(),
+		UID:        string(obj.GetUID()),
 	}
 
-	// Convert labels to JSON
+	// Set labels (will be stored as jsonb in postgres)
 	if labels := obj.GetLabels(); labels != nil {
-		labelsJSON, err := json.Marshal(labels)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal labels: %w", err)
-		}
-		row.Labels = string(labelsJSON)
-	} else {
-		row.Labels = "{}"
+		row.Labels = labels
 	}
 
-	// Convert annotations to JSON
+	// Set annotations (will be stored as jsonb in postgres)
 	if annotations := obj.GetAnnotations(); annotations != nil {
-		annotationsJSON, err := json.Marshal(annotations)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal annotations: %w", err)
+		row.Annotations = annotations
+	}
+
+	// Set owner references
+	if ownerRefs := obj.GetOwnerReferences(); ownerRefs != nil {
+		refs := make([]any, len(ownerRefs))
+		for i, ref := range ownerRefs {
+			refs[i] = ref
 		}
-		row.Annotations = string(annotationsJSON)
-	} else {
-		row.Annotations = "{}"
+		row.OwnerReferences = refs
 	}
 
-	// Format creation timestamp
-	if creationTime := obj.GetCreationTimestamp(); !creationTime.IsZero() {
-		row.CreatedAt = creationTime.Format(time.RFC3339)
-	}
+	// Set finalizers
+	row.Finalizers = obj.GetFinalizers()
 
-	// Extract spec
+	// Extract spec (will be stored as jsonb in postgres)
 	if spec, found, err := unstructured.NestedMap(obj.Object, "spec"); err != nil {
 		return nil, fmt.Errorf("failed to extract spec: %w", err)
 	} else if found && spec != nil {
-		specJSON, err := json.Marshal(spec)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal spec: %w", err)
-		}
-		row.Spec = string(specJSON)
-	} else {
-		row.Spec = "{}"
+		row.Spec = spec
 	}
 
-	// Extract status
+	// Extract status (will be stored as jsonb in postgres)
 	if status, found, err := unstructured.NestedMap(obj.Object, "status"); err != nil {
 		return nil, fmt.Errorf("failed to extract status: %w", err)
 	} else if found && status != nil {
-		statusJSON, err := json.Marshal(status)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal status: %w", err)
-		}
-		row.Status = string(statusJSON)
-	} else {
-		row.Status = "{}"
+		row.Status = status
 	}
 
 	return row, nil
