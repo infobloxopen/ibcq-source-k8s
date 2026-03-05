@@ -96,9 +96,9 @@ If `namespaces` is omitted or empty, the plugin fetches from all namespaces.
 ### List all custom resources
 
 ```sql
-SELECT context, gvk, namespace, name, created_at
+SELECT context, api_version, kind, namespace, name, uid
 FROM k8s_custom_resources
-ORDER BY created_at DESC;
+ORDER BY _cq_sync_time DESC;
 ```
 
 ### Find all cert-manager Certificates
@@ -108,28 +108,30 @@ SELECT
   context,
   namespace,
   name,
-  spec::jsonb->>'secretName' AS secret_name,
-  status::jsonb->'conditions'->0->>'type' AS status
+  spec->>'secretName' AS secret_name,
+  status->'conditions'->0->>'type' AS status
 FROM k8s_custom_resources
-WHERE gvk = 'cert-manager.io/v1/Certificate';
+WHERE api_version = 'cert-manager.io/v1'
+  AND kind = 'Certificate';
 ```
 
 ### List resources by labels
 
 ```sql
-SELECT name, namespace, labels::jsonb->>'app' AS app
+SELECT name, namespace, labels->>'app' AS app
 FROM k8s_custom_resources
-WHERE labels::jsonb->>'env' = 'production'
-  AND gvk = 'argoproj.io/v1alpha1/Application';
+WHERE labels->>'env' = 'production'
+  AND api_version = 'argoproj.io/v1alpha1'
+  AND kind = 'Application';
 ```
 
-### Find resources created in the last 7 days
+### Find resources synced in the last 7 days
 
 ```sql
-SELECT gvk, namespace, name, created_at
+SELECT api_version, kind, namespace, name, _cq_sync_time
 FROM k8s_custom_resources
-WHERE created_at > NOW() - INTERVAL '7 days'
-ORDER BY created_at DESC;
+WHERE _cq_sync_time > NOW() - INTERVAL '7 days'
+ORDER BY _cq_sync_time DESC;
 ```
 
 ### Check resource readiness
@@ -138,10 +140,11 @@ ORDER BY created_at DESC;
 SELECT 
   name,
   namespace,
-  status::jsonb->'conditions' AS conditions
+  status->'conditions' AS conditions
 FROM k8s_custom_resources
-WHERE gvk = 'cert-manager.io/v1/Certificate'
-  AND status::jsonb->'conditions'->0->>'status' != 'True';
+WHERE api_version = 'cert-manager.io/v1'
+  AND kind = 'Certificate'
+  AND status->'conditions'->0->>'status' != 'True';
 ```
 
 ## Common Custom Resources
