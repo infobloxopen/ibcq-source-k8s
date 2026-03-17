@@ -119,8 +119,13 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 				return nil // Don't fail entire fetch
 			}
 
-			// Fetch resources for this GVK
-			resources, err := fetchResourcesByGVRConcurrent(fetchCtx, cl, crSpec.GVK, gvr, crSpec)
+			// Fetch resources for this GVK with retry for transient errors
+			var resources []unstructured.Unstructured
+			err = RetryWithMetrics(fetchCtx, config, func() error {
+				var fetchErr error
+				resources, fetchErr = fetchResourcesByGVRConcurrent(fetchCtx, cl, crSpec.GVK, gvr, crSpec)
+				return fetchErr
+			}, gvkMetric)
 
 			duration := time.Since(startTime)
 
@@ -130,7 +135,7 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 					Resources: resources,
 					Error:     err,
 					Duration:  duration,
-					Attempts:  1,
+					Attempts:  gvkMetric.RetryCount + 1,
 					Status:    "failed",
 				}
 				gvkMetric.Complete(len(resources), err)
@@ -139,15 +144,16 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 				gvkErrors = append(gvkErrors, GVKError{
 					GVK:      crSpec.GVK,
 					Err:      err,
-					Attempts: 1,
+					Attempts: gvkMetric.RetryCount + 1,
 				})
 
-				// Log failed GVK fetch with timing
+				// Log failed GVK fetch with timing and retry info
 				cl.Logger().Warn().
 					Err(err).
 					Str("gvk", crSpec.GVK).
 					Dur("duration_ms", duration).
-					Msg("GVK fetch failed")
+					Int("retry_attempts", gvkMetric.RetryCount).
+					Msg("GVK fetch failed after retries")
 				return nil // Don't fail entire fetch
 			}
 
@@ -156,18 +162,19 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 				Resources: resources,
 				Error:     nil,
 				Duration:  duration,
-				Attempts:  1,
+				Attempts:  gvkMetric.RetryCount + 1,
 				Status:    "success",
 			}
 			gvkMetric.Complete(len(resources), nil)
 			metrics[i] = *gvkMetric
 
-			// Log successful GVK fetch with metrics
+			// Log successful GVK fetch with metrics and retry info
 			cl.Logger().Info().
 				Str("gvk", crSpec.GVK).
 				Str("status", "success").
 				Dur("duration_ms", duration).
 				Int("resource_count", len(resources)).
+				Int("retry_attempts", gvkMetric.RetryCount).
 				Float64("throughput_per_sec", gvkMetric.ThroughputPerSec).
 				Msg("GVK fetch completed")
 
