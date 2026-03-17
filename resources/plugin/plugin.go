@@ -16,6 +16,7 @@ import (
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/resources/services/coordination"
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/resources/services/core"
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/resources/services/crd"
+	"github.com/cloudquery/cloudquery/plugins/source/k8s/resources/services/customresources"
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/resources/services/discovery"
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/resources/services/networking"
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/resources/services/nodes"
@@ -145,6 +146,7 @@ func getTables() schema.Tables {
 		core.Services(),
 		core.ServiceAccounts(),
 		crd.CRDs(),
+		customresources.CustomResources(),
 		networking.Ingresses(),
 		networking.NetworkPolicies(),
 		networking.IngressClasses(),
