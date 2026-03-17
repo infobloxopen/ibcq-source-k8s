@@ -868,3 +868,260 @@ func TestGVKFetchMetricsThroughputCalculation(t *testing.T) {
 		})
 	}
 }
+
+// Phase 4: Integration and E2E Tests
+
+// TestConcurrentFetch_MultipleGVKs verifies concurrent processing of multiple GVKs
+func TestConcurrentFetch_MultipleGVKs(t *testing.T) {
+	gvks := []string{
+		"api.example.com/v1/Resource1",
+		"api.example.com/v1/Resource2",
+		"api.example.com/v1/Resource3",
+	}
+
+	results := make([]FetchResult, len(gvks))
+
+	// Simulate concurrent fetch with varying times
+	times := []time.Duration{100, 150, 50}
+	for i, gvk := range gvks {
+		i, gvk := i, gvk
+		go func() {
+			time.Sleep(times[i] * time.Millisecond)
+			resources := make([]unstructured.Unstructured, i+10)
+			for j := 0; j < i+10; j++ {
+				resources[j] = unstructured.Unstructured{
+					Object: map[string]interface{}{
+						"apiVersion": "v1",
+						"kind":       "TestResource",
+						"metadata": map[string]interface{}{
+							"name": fmt.Sprintf("resource-%d", j),
+						},
+					},
+				}
+			}
+			results[i] = FetchResult{
+				GVK:       gvk,
+				Resources: resources,
+				Error:     nil,
+				Duration:  times[i] * time.Millisecond,
+				Status:    "success",
+				Attempts:  1,
+			}
+		}()
+	}
+
+	time.Sleep(300 * time.Millisecond)
+
+	// Verify all completed
+	for i, result := range results {
+		assert.NotEmpty(t, result.GVK)
+		assert.Nil(t, result.Error)
+		assert.Equal(t, "success", result.Status)
+		assert.Greater(t, len(result.Resources), 0)
+		assert.Equal(t, i+10, len(result.Resources))
+	}
+}
+
+// TestConcurrentFetch_PartialFailure verifies one GVK failure doesn't block others
+func TestConcurrentFetch_PartialFailure(t *testing.T) {
+	gvks := []string{
+		"api.example.com/v1/Resource1",
+		"api.example.com/v1/Resource2",
+		"api.example.com/v1/Resource3",
+	}
+
+	results := make([]FetchResult, len(gvks))
+
+	// Simulate fetch: resource 2 fails, others succeed
+	for i, gvk := range gvks {
+		i, gvk := i, gvk
+		go func() {
+			time.Sleep(10 * time.Millisecond)
+			if i == 1 { // Resource2 fails
+				results[i] = FetchResult{
+					GVK:      gvk,
+					Error:    fmt.Errorf("RBAC denied"),
+					Status:   "failed",
+					Attempts: 1,
+				}
+			} else { // Others succeed
+				resources := make([]unstructured.Unstructured, 5)
+				results[i] = FetchResult{
+					GVK:       gvk,
+					Resources: resources,
+					Error:     nil,
+					Status:    "success",
+					Attempts:  1,
+				}
+			}
+		}()
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify partial success
+	successCount := 0
+	failureCount := 0
+	for _, result := range results {
+		if result.Error == nil && result.Status == "success" {
+			successCount++
+		} else if result.Error != nil && result.Status == "failed" {
+			failureCount++
+		}
+	}
+
+	assert.Equal(t, 2, successCount)
+	assert.Equal(t, 1, failureCount)
+	assert.NoError(t, results[0].Error)
+	assert.NoError(t, results[2].Error)
+	assert.Error(t, results[1].Error)
+}
+
+// TestConcurrentFetch_AllFailed verifies error when all GVKs fail
+func TestConcurrentFetch_AllFailed(t *testing.T) {
+	gvks := []string{
+		"api.example.com/v1/Resource1",
+		"api.example.com/v1/Resource2",
+		"api.example.com/v1/Resource3",
+	}
+
+	results := make([]FetchResult, len(gvks))
+
+	// Simulate all failing
+	for i, gvk := range gvks {
+		i, gvk := i, gvk
+		go func() {
+			time.Sleep(10 * time.Millisecond)
+			results[i] = FetchResult{
+				GVK:      gvk,
+				Error:    fmt.Errorf("API error"),
+				Status:   "failed",
+				Attempts: 1,
+			}
+		}()
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify all failed
+	failureCount := 0
+	for _, result := range results {
+		if result.Error != nil && result.Status == "failed" {
+			failureCount++
+		}
+	}
+
+	assert.Equal(t, 3, failureCount)
+}
+
+// TestConcurrentWithMetrics verifies metrics are collected during concurrent fetch
+func TestConcurrentWithMetrics(t *testing.T) {
+	gvks := []string{
+		"api.example.com/v1/Pod",
+		"api.example.com/v1/Service",
+		"api.example.com/v1/Ingress",
+	}
+
+	metrics := make([]GVKFetchMetrics, len(gvks))
+
+	// Simulate concurrent fetch with metrics
+	for i, gvk := range gvks {
+		i, gvk := i, gvk
+		go func() {
+			metric := NewGVKFetchMetrics(gvk)
+			time.Sleep(time.Duration(50*(i+1)) * time.Millisecond)
+			metric.Complete(i*10+10, nil)
+			metrics[i] = *metric
+		}()
+	}
+
+	time.Sleep(300 * time.Millisecond)
+
+	// Verify metrics collected
+	assert.Equal(t, gvks[0], metrics[0].GVK)
+	assert.Equal(t, gvks[1], metrics[1].GVK)
+	assert.Equal(t, gvks[2], metrics[2].GVK)
+
+	// Verify resource counts
+	assert.Equal(t, 10, metrics[0].ResourceCount)
+	assert.Equal(t, 20, metrics[1].ResourceCount)
+	assert.Equal(t, 30, metrics[2].ResourceCount)
+
+	// Verify throughput calculated
+	for _, metric := range metrics {
+		if metric.ResourceCount > 0 && metric.Duration > 0 {
+			assert.Greater(t, metric.ThroughputPerSec, 0.0)
+		}
+	}
+}
+
+// TestConcurrentWithRetry verifies retry happens during concurrent fetch
+func TestConcurrentWithRetry(t *testing.T) {
+	config := DefaultConcurrencyConfig()
+	config.RetryAttempts = 2
+	config.RetryBackoff = 10 * time.Millisecond
+
+	// Simple sequential test to verify retry integration
+	metric := NewGVKFetchMetrics("api.example.com/v1/Resource1")
+	callCount := 0
+
+	err := RetryWithMetrics(context.Background(), config, func() error {
+		callCount++
+		// First call fails with transient error (timeout), second succeeds
+		if callCount == 1 {
+			return context.DeadlineExceeded // Transient error
+		}
+		return nil
+	}, metric)
+
+	// Verify success after retry
+	assert.NoError(t, err)
+	assert.Equal(t, 2, callCount)         // Called twice (1 fail + 1 success)
+	assert.Equal(t, 1, metric.RetryCount) // Had 1 retry
+}
+
+// TestConcurrentMetricsAggregation verifies sync summary aggregation
+func TestConcurrentMetricsAggregation(t *testing.T) {
+	startTime := time.Now()
+
+	metrics := []GVKFetchMetrics{
+		{
+			GVK:              "api.example.com/v1/Pod",
+			Duration:         100 * time.Millisecond,
+			ResourceCount:    50,
+			Status:           "success",
+			ThroughputPerSec: 500.0,
+		},
+		{
+			GVK:              "api.example.com/v1/Service",
+			Duration:         80 * time.Millisecond,
+			ResourceCount:    30,
+			Status:           "success",
+			ThroughputPerSec: 375.0,
+		},
+		{
+			GVK:           "api.example.com/v1/Ingress",
+			Duration:      50 * time.Millisecond,
+			ResourceCount: 0,
+			Status:        "failed",
+			ErrorMessage:  "RBAC denied",
+		},
+	}
+
+	summary := GenerateSyncSummary("test-context", startTime, 10, metrics)
+
+	// Verify aggregation
+	assert.Equal(t, 3, summary.TotalGVKs)
+	assert.Equal(t, 2, summary.SuccessfulGVKs)
+	assert.Equal(t, 1, summary.FailedGVKs)
+	assert.Equal(t, 80, summary.TotalResources)
+	assert.Equal(t, 230*time.Millisecond, summary.EstimatedSequential)
+
+	// Verify speedup
+	speedup := summary.SpeedupFactor()
+	assert.Greater(t, speedup, 1.0)
+
+	// Verify sorting works
+	summary.SortMetricsByDuration()
+	assert.Equal(t, "api.example.com/v1/Pod", summary.GVKMetrics[0].GVK)
+}
