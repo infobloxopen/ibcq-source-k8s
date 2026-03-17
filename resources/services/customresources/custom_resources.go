@@ -48,6 +48,7 @@ type CustomResourceRow struct {
 // fetchCustomResources retrieves custom resources based on plugin configuration using concurrent processing.
 // Multiple GVKs are fetched in parallel with bounded concurrency to improve performance while
 // controlling resource usage. If one GVK fails, others continue processing (partial success).
+// Includes per-GVK timing logs and sync summary report for observability.
 func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *schema.Resource, res chan<- any) error {
 	cl := meta.(*client.Client)
 
@@ -61,6 +62,9 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 	// Create concurrency config with sensible defaults
 	config := DefaultConcurrencyConfig()
 
+	// Start sync timer for metrics
+	syncStartTime := time.Now()
+
 	// Create errgroup with bounded concurrency for parallel GVK processing
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(config.MaxConcurrentGVKs)
@@ -73,6 +77,9 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 	results := make([]FetchResult, len(spec.CustomResources))
 	var gvkErrors []GVKError
 
+	// Collect metrics for each GVK
+	metrics := make([]GVKFetchMetrics, len(spec.CustomResources))
+
 	// Process each configured custom resource concurrently
 	for i, crSpec := range spec.CustomResources {
 		i, crSpec := i, crSpec // Capture loop variables for goroutine closure
@@ -82,7 +89,10 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 			fetchCtx, cancel := context.WithTimeout(ctx, config.FetchTimeout)
 			defer cancel()
 
+			// Start timing for this GVK
 			startTime := time.Now()
+			gvkMetric := NewGVKFetchMetrics(crSpec.GVK)
+			gvkMetric.StartTime = startTime
 
 			// Parse GVK to GVR
 			gvr, err := parseGVKToGVR(crSpec.GVK)
@@ -94,12 +104,18 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 					Attempts: 1,
 					Status:   "failed",
 				}
+				gvkMetric.Complete(0, err)
+				metrics[i] = *gvkMetric
+
 				gvkErrors = append(gvkErrors, GVKError{
 					GVK:       crSpec.GVK,
 					Err:       err,
 					Attempts:  1,
 					ErrorType: "validation",
 				})
+
+				// Log failed GVK fetch
+				cl.Logger().Debug().Err(err).Str("gvk", crSpec.GVK).Msg("Failed to parse GVK")
 				return nil // Don't fail entire fetch
 			}
 
@@ -117,6 +133,8 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 					Attempts:  1,
 					Status:    "failed",
 				}
+				gvkMetric.Complete(len(resources), err)
+				metrics[i] = *gvkMetric
 
 				gvkErrors = append(gvkErrors, GVKError{
 					GVK:      crSpec.GVK,
@@ -124,6 +142,12 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 					Attempts: 1,
 				})
 
+				// Log failed GVK fetch with timing
+				cl.Logger().Warn().
+					Err(err).
+					Str("gvk", crSpec.GVK).
+					Dur("duration_ms", duration).
+					Msg("GVK fetch failed")
 				return nil // Don't fail entire fetch
 			}
 
@@ -135,6 +159,17 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 				Attempts:  1,
 				Status:    "success",
 			}
+			gvkMetric.Complete(len(resources), nil)
+			metrics[i] = *gvkMetric
+
+			// Log successful GVK fetch with metrics
+			cl.Logger().Info().
+				Str("gvk", crSpec.GVK).
+				Str("status", "success").
+				Dur("duration_ms", duration).
+				Int("resource_count", len(resources)).
+				Float64("throughput_per_sec", gvkMetric.ThroughputPerSec).
+				Msg("GVK fetch completed")
 
 			return nil
 		})
@@ -148,9 +183,11 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 
 	// Send fetched resources to the output channel (sequentially to maintain order)
 	successCount := 0
+	totalResources := 0
 	for _, result := range results {
 		if result.Error == nil {
 			successCount++
+			totalResources += len(result.Resources)
 			for _, resource := range result.Resources {
 				row, err := convertToCustomResourceRow(ctx, cl, result.GVK, &resource)
 				if err != nil {
@@ -164,6 +201,30 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 			}
 		}
 	}
+
+	// Generate and log sync summary with metrics
+	contextName := ctx.Value("context")
+	if contextName == nil {
+		contextName = "unknown"
+	}
+
+	summary := GenerateSyncSummary(fmt.Sprintf("%v", contextName), syncStartTime, config.MaxConcurrentGVKs, metrics)
+
+	// Log summary with key metrics
+	cl.Logger().Info().
+		Str("context", summary.Context).
+		Int("total_gvks", summary.TotalGVKs).
+		Int("successful_gvks", summary.SuccessfulGVKs).
+		Int("failed_gvks", summary.FailedGVKs).
+		Int("total_resources", summary.TotalResources).
+		Dur("total_duration", summary.TotalDuration).
+		Dur("estimated_sequential", summary.EstimatedSequential).
+		Float64("speedup_factor", summary.SpeedupFactor()).
+		Float64("avg_throughput", summary.AverageThroughput).
+		Msg("Custom resources sync completed")
+
+	// Print human-readable summary
+	cl.Logger().Info().Msg(summary.String())
 
 	// If all GVKs failed, return an error
 	if successCount == 0 && len(gvkErrors) > 0 {

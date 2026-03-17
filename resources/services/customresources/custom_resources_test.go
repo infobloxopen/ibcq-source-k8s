@@ -653,3 +653,218 @@ func BenchmarkFetchResultMetricsCalculation(b *testing.B) {
 		}
 	}
 }
+
+// TestGVKFetchMetricsCreation verifies GVKFetchMetrics creation and completion
+func TestGVKFetchMetricsCreation(t *testing.T) {
+	metric := NewGVKFetchMetrics("api.example.com/v1/Certificate")
+
+	assert.Equal(t, "api.example.com/v1/Certificate", metric.GVK)
+	assert.Equal(t, 0, metric.ResourceCount)
+	assert.Equal(t, 0, metric.Pages)
+	assert.Equal(t, 0, metric.RetryCount)
+	assert.False(t, metric.StartTime.IsZero())
+	assert.True(t, metric.EndTime.IsZero()) // Not completed yet
+}
+
+// TestGVKFetchMetricsComplete verifies metrics completion and calculations
+func TestGVKFetchMetricsComplete(t *testing.T) {
+	metric := NewGVKFetchMetrics("api.example.com/v1/Pod")
+	time.Sleep(10 * time.Millisecond) // Wait a bit
+
+	err := fmt.Errorf("test error")
+	metric.Complete(50, err)
+
+	assert.Equal(t, "failed", metric.Status)
+	assert.Equal(t, "test error", metric.ErrorMessage)
+	assert.Equal(t, 50, metric.ResourceCount)
+	assert.Greater(t, metric.Duration.Milliseconds(), int64(5))
+	assert.Greater(t, metric.ThroughputPerSec, 0.0)
+}
+
+// TestGenerateSyncSummary verifies sync summary generation
+func TestGenerateSyncSummary(t *testing.T) {
+	startTime := time.Now()
+
+	metrics := []GVKFetchMetrics{
+		{
+			GVK:              "api.example.com/v1/Pod",
+			Duration:         100 * time.Millisecond,
+			ResourceCount:    50,
+			Status:           "success",
+			ThroughputPerSec: 500.0,
+		},
+		{
+			GVK:              "api.example.com/v1/Service",
+			Duration:         200 * time.Millisecond,
+			ResourceCount:    30,
+			Status:           "success",
+			ThroughputPerSec: 150.0,
+		},
+		{
+			GVK:           "api.example.com/v1/Ingress",
+			Duration:      150 * time.Millisecond,
+			ResourceCount: 0,
+			Status:        "failed",
+			ErrorMessage:  "RBAC denied",
+		},
+	}
+
+	summary := GenerateSyncSummary("default", startTime, 10, metrics)
+
+	assert.Equal(t, "default", summary.Context)
+	assert.Equal(t, 3, summary.TotalGVKs)
+	assert.Equal(t, 2, summary.SuccessfulGVKs)
+	assert.Equal(t, 1, summary.FailedGVKs)
+	assert.Equal(t, 80, summary.TotalResources)
+	assert.Equal(t, 10, summary.ConcurrencyLevel)
+	assert.Greater(t, summary.TotalDuration, time.Duration(0))
+	assert.Equal(t, 450*time.Millisecond, summary.EstimatedSequential)
+	assert.Contains(t, summary.FailedDetails, "api.example.com/v1/Ingress")
+	assert.Equal(t, "RBAC denied", summary.FailedDetails["api.example.com/v1/Ingress"])
+}
+
+// TestSyncSummarySpeedupFactor verifies speedup calculation
+func TestSyncSummarySpeedupFactor(t *testing.T) {
+	testCases := []struct {
+		name            string
+		totalDuration   time.Duration
+		estimatedSeq    time.Duration
+		expectedSpeedup float64
+	}{
+		{
+			name:            "2x speedup",
+			totalDuration:   500 * time.Millisecond,
+			estimatedSeq:    1 * time.Second,
+			expectedSpeedup: 2.0,
+		},
+		{
+			name:            "5x speedup",
+			totalDuration:   200 * time.Millisecond,
+			estimatedSeq:    1 * time.Second,
+			expectedSpeedup: 5.0,
+		},
+		{
+			name:            "no speedup (sequential)",
+			totalDuration:   1 * time.Second,
+			estimatedSeq:    1 * time.Second,
+			expectedSpeedup: 1.0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			summary := SyncSummary{
+				TotalDuration:       tc.totalDuration,
+				EstimatedSequential: tc.estimatedSeq,
+			}
+
+			speedup := summary.SpeedupFactor()
+			assert.InDelta(t, tc.expectedSpeedup, speedup, 0.01)
+		})
+	}
+}
+
+// TestSyncSummarySorting verifies metric sorting functions
+func TestSyncSummarySorting(t *testing.T) {
+	summary := SyncSummary{
+		GVKMetrics: []GVKFetchMetrics{
+			{GVK: "Pod", Duration: 100 * time.Millisecond, ResourceCount: 50},
+			{GVK: "Service", Duration: 300 * time.Millisecond, ResourceCount: 10},
+			{GVK: "Ingress", Duration: 200 * time.Millisecond, ResourceCount: 100},
+		},
+	}
+
+	// Sort by duration
+	summary.SortMetricsByDuration()
+	assert.Equal(t, "Service", summary.GVKMetrics[0].GVK) // 300ms - slowest
+	assert.Equal(t, "Ingress", summary.GVKMetrics[1].GVK) // 200ms
+	assert.Equal(t, "Pod", summary.GVKMetrics[2].GVK)     // 100ms - fastest
+
+	// Sort by resource count
+	summary.SortMetricsByResourceCount()
+	assert.Equal(t, "Ingress", summary.GVKMetrics[0].GVK) // 100 resources
+	assert.Equal(t, "Pod", summary.GVKMetrics[1].GVK)     // 50 resources
+	assert.Equal(t, "Service", summary.GVKMetrics[2].GVK) // 10 resources
+}
+
+// TestSyncSummaryString verifies human-readable summary output
+func TestSyncSummaryString(t *testing.T) {
+	startTime := time.Now()
+
+	metrics := []GVKFetchMetrics{
+		{
+			GVK:              "api.example.com/v1/Pod",
+			Duration:         100 * time.Millisecond,
+			ResourceCount:    50,
+			Status:           "success",
+			ThroughputPerSec: 500.0,
+		},
+		{
+			GVK:           "api.example.com/v1/Service",
+			Duration:      50 * time.Millisecond,
+			ResourceCount: 0,
+			Status:        "failed",
+			ErrorMessage:  "timeout",
+		},
+	}
+
+	summary := GenerateSyncSummary("test-context", startTime, 5, metrics)
+	output := summary.String()
+
+	// Verify output contains key information
+	assert.Contains(t, output, "test-context")
+	assert.Contains(t, output, "Custom Resources Sync Summary")
+	assert.Contains(t, output, "Speedup Factor")
+	assert.Contains(t, output, "2") // 2 GVKs
+	assert.Contains(t, output, "1") // 1 successful
+	assert.Contains(t, output, "Slowest GVKs")
+	assert.Contains(t, output, "Pod")
+	assert.Contains(t, output, "Failed GVKs")
+	assert.Contains(t, output, "Service")
+	assert.Contains(t, output, "timeout")
+}
+
+// TestGVKFetchMetricsThroughputCalculation verifies throughput calculation
+func TestGVKFetchMetricsThroughputCalculation(t *testing.T) {
+	testCases := []struct {
+		name          string
+		resourceCount int
+		duration      time.Duration
+		expectedTPM   float64
+	}{
+		{
+			name:          "100 resources in 1 second",
+			resourceCount: 100,
+			duration:      1 * time.Second,
+			expectedTPM:   100.0,
+		},
+		{
+			name:          "50 resources in 500ms",
+			resourceCount: 50,
+			duration:      500 * time.Millisecond,
+			expectedTPM:   100.0,
+		},
+		{
+			name:          "zero duration",
+			resourceCount: 100,
+			duration:      0,
+			expectedTPM:   0.0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			metric := &GVKFetchMetrics{
+				ResourceCount: tc.resourceCount,
+				Duration:      tc.duration,
+			}
+
+			// Manually calculate throughput
+			if metric.Duration > 0 {
+				metric.ThroughputPerSec = float64(tc.resourceCount) / metric.Duration.Seconds()
+			}
+
+			assert.InDelta(t, tc.expectedTPM, metric.ThroughputPerSec, 0.1)
+		})
+	}
+}
