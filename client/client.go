@@ -13,7 +13,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
 	// import all k8s auth options
@@ -31,8 +30,6 @@ type Client struct {
 	namespaces map[string][]v1.Namespace
 	// map context_name -> API extensions
 	apiExtensions map[string]apiextensionsclientset.Interface
-	// map context_name -> dynamic client for custom resources
-	dynamicClients map[string]dynamic.Interface
 
 	spec     *spec.Spec
 	contexts []string
@@ -59,14 +56,6 @@ func (c *Client) Client() kubernetes.Interface {
 
 func (c *Client) APIExtensions() apiextensionsclientset.Interface {
 	return c.apiExtensions[c.Context]
-}
-
-func (c *Client) DynamicClient() dynamic.Interface {
-	return c.dynamicClients[c.Context]
-}
-
-func (c *Client) Spec() *spec.Spec {
-	return c.spec
 }
 
 func (c *Client) Namespaces() []v1.Namespace {
@@ -107,15 +96,14 @@ func Configure(ctx context.Context, logger zerolog.Logger, s spec.Spec) (schema.
 	}
 
 	c := Client{
-		logger:         logger,
-		clients:        make(map[string]kubernetes.Interface),
-		namespaces:     make(map[string][]v1.Namespace),
-		apiExtensions:  make(map[string]apiextensionsclientset.Interface),
-		dynamicClients: make(map[string]dynamic.Interface),
-		spec:           &s,
-		contexts:       contexts,
-		Context:        contexts[0],
-		paths:          make(map[string]struct{}),
+		logger:        logger,
+		clients:       make(map[string]kubernetes.Interface),
+		namespaces:    make(map[string][]v1.Namespace),
+		apiExtensions: make(map[string]apiextensionsclientset.Interface),
+		spec:          &s,
+		contexts:      contexts,
+		Context:       contexts[0],
+		paths:         make(map[string]struct{}),
 	}
 
 	for _, ctxName := range contexts {
@@ -132,10 +120,6 @@ func Configure(ctx context.Context, logger zerolog.Logger, s spec.Spec) (schema.
 		if err != nil {
 			return nil, fmt.Errorf("failed to build k8s API Extensions client for context %q: %w", ctxName, err)
 		}
-		dynClient, err := dynamic.NewForConfig(restConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build k8s dynamic client for context %q: %w", ctxName, err)
-		}
 		c.paths, err = getAPIsMap(kClient)
 		if err != nil {
 			logger.Warn().Err(err).Msg("Failed to get OpenAPI schema. It might be not supported in the current version of Kubernetes. OpenAPI has been supported since Kubernetes 1.4")
@@ -148,7 +132,6 @@ func Configure(ctx context.Context, logger zerolog.Logger, s spec.Spec) (schema.
 		c.clients[ctxName] = kClient
 		c.namespaces[ctxName] = namespaces
 		c.apiExtensions[ctxName] = apiExtClient
-		c.dynamicClients[ctxName] = dynClient
 	}
 
 	return &c, nil
