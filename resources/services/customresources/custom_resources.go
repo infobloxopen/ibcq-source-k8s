@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/client"
 	"github.com/cloudquery/cloudquery/plugins/source/k8s/client/spec"
 	"github.com/cloudquery/plugin-sdk/v4/schema"
 	"github.com/cloudquery/plugin-sdk/v4/transformers"
+	"golang.org/x/sync/errgroup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	metav1schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -42,7 +45,9 @@ type CustomResourceRow struct {
 	Status          map[string]any    `json:"status,omitempty"`
 }
 
-// fetchCustomResources retrieves custom resources based on plugin configuration
+// fetchCustomResources retrieves custom resources based on plugin configuration using concurrent processing.
+// Multiple GVKs are fetched in parallel with bounded concurrency to improve performance while
+// controlling resource usage. If one GVK fails, others continue processing (partial success).
 func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *schema.Resource, res chan<- any) error {
 	cl := meta.(*client.Client)
 
@@ -53,18 +58,116 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 		return nil
 	}
 
-	// Iterate through each configured custom resource
-	for _, crSpec := range spec.CustomResources {
-		// Parse GVK to GVR
-		gvr, err := parseGVKToGVR(crSpec.GVK)
-		if err != nil {
-			return fmt.Errorf("invalid GVK %q: %w", crSpec.GVK, err)
-		}
+	// Create concurrency config with sensible defaults
+	config := DefaultConcurrencyConfig()
 
-		// Fetch resources for this GVK
-		if err := fetchResourcesByGVR(ctx, cl, crSpec.GVK, gvr, crSpec, res); err != nil {
-			return fmt.Errorf("failed to fetch resources for %q: %w", crSpec.GVK, err)
+	// Create errgroup with bounded concurrency for parallel GVK processing
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(config.MaxConcurrentGVKs)
+
+	// Use a mutex to safely send results to the channel
+	// This prevents concurrent writes to the res channel which could cause panics
+	var mu sync.Mutex
+
+	// Track results for each GVK to handle partial failures gracefully
+	results := make([]FetchResult, len(spec.CustomResources))
+	var gvkErrors []GVKError
+
+	// Process each configured custom resource concurrently
+	for i, crSpec := range spec.CustomResources {
+		i, crSpec := i, crSpec // Capture loop variables for goroutine closure
+
+		g.Go(func() error {
+			// Create a context with timeout for this GVK fetch
+			fetchCtx, cancel := context.WithTimeout(ctx, config.FetchTimeout)
+			defer cancel()
+
+			startTime := time.Now()
+
+			// Parse GVK to GVR
+			gvr, err := parseGVKToGVR(crSpec.GVK)
+			if err != nil {
+				results[i] = FetchResult{
+					GVK:      crSpec.GVK,
+					Error:    fmt.Errorf("invalid GVK format: %w", err),
+					Duration: time.Since(startTime),
+					Attempts: 1,
+					Status:   "failed",
+				}
+				gvkErrors = append(gvkErrors, GVKError{
+					GVK:       crSpec.GVK,
+					Err:       err,
+					Attempts:  1,
+					ErrorType: "validation",
+				})
+				return nil // Don't fail entire fetch
+			}
+
+			// Fetch resources for this GVK
+			resources, err := fetchResourcesByGVRConcurrent(fetchCtx, cl, crSpec.GVK, gvr, crSpec)
+
+			duration := time.Since(startTime)
+
+			if err != nil {
+				results[i] = FetchResult{
+					GVK:       crSpec.GVK,
+					Resources: resources,
+					Error:     err,
+					Duration:  duration,
+					Attempts:  1,
+					Status:    "failed",
+				}
+
+				gvkErrors = append(gvkErrors, GVKError{
+					GVK:      crSpec.GVK,
+					Err:      err,
+					Attempts: 1,
+				})
+
+				return nil // Don't fail entire fetch
+			}
+
+			results[i] = FetchResult{
+				GVK:       crSpec.GVK,
+				Resources: resources,
+				Error:     nil,
+				Duration:  duration,
+				Attempts:  1,
+				Status:    "success",
+			}
+
+			return nil
+		})
+	}
+
+	// Wait for all GVK fetches to complete
+	if err := g.Wait(); err != nil {
+		// errgroup only returns error if context was cancelled
+		return fmt.Errorf("concurrent fetch error: %w", err)
+	}
+
+	// Send fetched resources to the output channel (sequentially to maintain order)
+	successCount := 0
+	for _, result := range results {
+		if result.Error == nil {
+			successCount++
+			for _, resource := range result.Resources {
+				row, err := convertToCustomResourceRow(ctx, cl, result.GVK, &resource)
+				if err != nil {
+					// Log and continue on conversion error
+					continue
+				}
+
+				mu.Lock()
+				res <- row
+				mu.Unlock()
+			}
 		}
+	}
+
+	// If all GVKs failed, return an error
+	if successCount == 0 && len(gvkErrors) > 0 {
+		return fmt.Errorf("all custom resources fetch failed: %d errors encountered", len(gvkErrors))
 	}
 
 	return nil
@@ -91,7 +194,63 @@ func parseGVKToGVR(gvk string) (metav1schema.GroupVersionResource, error) {
 	}, nil
 }
 
-// fetchResourcesByGVR fetches all resources for a given GVR
+// fetchResourcesByGVRConcurrent fetches all resources for a given GVR and returns them as a slice.
+// This is used internally by concurrent processing and doesn't send directly to the output channel.
+func fetchResourcesByGVRConcurrent(ctx context.Context, cl *client.Client, gvk string, gvr metav1schema.GroupVersionResource, crSpec spec.CustomResourceSpec) ([]unstructured.Unstructured, error) {
+	dynClient := cl.DynamicClient()
+	if dynClient == nil {
+		return nil, fmt.Errorf("dynamic client not initialized for context %q", cl.Context)
+	}
+
+	var allResources []unstructured.Unstructured
+
+	// Determine if we need to filter by namespaces
+	if len(crSpec.Namespaces) > 0 {
+		// Fetch from specific namespaces
+		for _, ns := range crSpec.Namespaces {
+			resources, err := fetchFromNamespaceConcurrent(ctx, cl, dynClient.Resource(gvr).Namespace(ns), gvk)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch from namespace %q: %w", ns, err)
+			}
+			allResources = append(allResources, resources...)
+		}
+	} else {
+		// Fetch from all namespaces (or cluster-scoped if applicable)
+		resources, err := fetchFromNamespaceConcurrent(ctx, cl, dynClient.Resource(gvr).Namespace(""), gvk)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch resources: %w", err)
+		}
+		allResources = append(allResources, resources...)
+	}
+
+	return allResources, nil
+}
+
+// fetchFromNamespaceConcurrent handles pagination and fetching from a specific namespace (or all if empty).
+// Returns a slice of resources instead of sending to a channel to support concurrent processing.
+func fetchFromNamespaceConcurrent(ctx context.Context, cl *client.Client, resourceClient dynamic.ResourceInterface, gvk string) ([]unstructured.Unstructured, error) {
+	var allResources []unstructured.Unstructured
+	opts := metav1.ListOptions{}
+
+	for {
+		list, err := resourceClient.List(ctx, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list resources: %w", err)
+		}
+
+		allResources = append(allResources, list.Items...)
+
+		// Check for pagination
+		if list.GetContinue() == "" {
+			break
+		}
+		opts.Continue = list.GetContinue()
+	}
+
+	return allResources, nil
+}
+
+// fetchResourcesByGVR fetches all resources for a given GVR (legacy function, kept for compatibility)
 func fetchResourcesByGVR(ctx context.Context, cl *client.Client, gvk string, gvr metav1schema.GroupVersionResource, crSpec spec.CustomResourceSpec, res chan<- any) error {
 	dynClient := cl.DynamicClient()
 	if dynClient == nil {

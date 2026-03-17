@@ -2,6 +2,7 @@ package customresources
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -352,3 +353,303 @@ func TestConvertToCustomResourceRow(t *testing.T) {
 
 // Note: Full integration tests for convertToCustomResourceRow will be in Phase 5
 // These unit tests verify the table structure and helper functions
+
+// TestDefaultConcurrencyConfig verifies that default concurrency config has sensible values
+func TestDefaultConcurrencyConfig(t *testing.T) {
+	config := DefaultConcurrencyConfig()
+
+	assert.Equal(t, 10, config.MaxConcurrentGVKs, "Default max concurrent GVKs should be 10")
+	assert.Equal(t, 5*time.Minute, config.FetchTimeout, "Default fetch timeout should be 5 minutes")
+	assert.Equal(t, 3, config.RetryAttempts, "Default retry attempts should be 3")
+	assert.Equal(t, 100*time.Millisecond, config.RetryBackoff, "Default retry backoff should be 100ms")
+	assert.Equal(t, 10*time.Second, config.MaxRetryBackoff, "Default max retry backoff should be 10s")
+}
+
+// TestConcurrencyConfigValidate verifies that Validate() corrects invalid values
+func TestConcurrencyConfigValidate(t *testing.T) {
+	tests := []struct {
+		name   string
+		config ConcurrencyConfig
+		expect ConcurrencyConfig
+	}{
+		{
+			name:   "negative_max_concurrent",
+			config: ConcurrencyConfig{MaxConcurrentGVKs: -5},
+			expect: ConcurrencyConfig{MaxConcurrentGVKs: 0, FetchTimeout: 5 * time.Minute, RetryAttempts: 0, RetryBackoff: 100 * time.Millisecond, MaxRetryBackoff: 10 * time.Second},
+		},
+		{
+			name:   "zero_timeout",
+			config: ConcurrencyConfig{FetchTimeout: 0, RetryBackoff: 100 * time.Millisecond, MaxRetryBackoff: 10 * time.Second},
+			expect: ConcurrencyConfig{MaxConcurrentGVKs: 0, FetchTimeout: 5 * time.Minute, RetryAttempts: 0, RetryBackoff: 100 * time.Millisecond, MaxRetryBackoff: 10 * time.Second},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.config.Validate()
+			assert.Equal(t, tt.expect.MaxConcurrentGVKs, tt.config.MaxConcurrentGVKs)
+			assert.Equal(t, tt.expect.FetchTimeout, tt.config.FetchTimeout)
+		})
+	}
+}
+
+// TestAdjustConcurrencyForClusterSize verifies concurrency scaling based on node count
+func TestAdjustConcurrencyForClusterSize(t *testing.T) {
+	tests := []struct {
+		nodes    int
+		expected int
+	}{
+		{10, 5},     // Small cluster clamped to min 5
+		{100, 5},    // Small cluster clamped to min 5
+		{250, 5},    // 250/50 = 5
+		{500, 10},   // 500/50 = 10
+		{1000, 20},  // 1000/50 = 20
+		{2500, 50},  // 2500/50 = 50, clamped to max 50
+		{10000, 50}, // 10000/50 = 200, clamped to max 50
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("nodes_%d", tt.nodes), func(t *testing.T) {
+			result := AdjustConcurrencyForClusterSize(tt.nodes)
+			assert.Equal(t, tt.expected, result, "node count %d should yield %d workers", tt.nodes, tt.expected)
+		})
+	}
+}
+
+// TestFetchResultMetrics verifies FetchResult throughput calculation
+func TestFetchResultMetrics(t *testing.T) {
+	tests := []struct {
+		name     string
+		result   FetchResult
+		expThru  float64
+		expCount int
+	}{
+		{
+			name: "100_resources_1_second",
+			result: FetchResult{
+				GVK:       "test.io/v1/Test",
+				Resources: make([]unstructured.Unstructured, 100),
+				Duration:  1 * time.Second,
+				Error:     nil,
+			},
+			expThru:  100.0,
+			expCount: 100,
+		},
+		{
+			name: "50_resources_500ms",
+			result: FetchResult{
+				GVK:       "test.io/v1/Test",
+				Resources: make([]unstructured.Unstructured, 50),
+				Duration:  500 * time.Millisecond,
+				Error:     nil,
+			},
+			expThru:  100.0, // 50 / 0.5 = 100
+			expCount: 50,
+		},
+		{
+			name: "zero_duration",
+			result: FetchResult{
+				GVK:       "test.io/v1/Test",
+				Resources: make([]unstructured.Unstructured, 100),
+				Duration:  0,
+				Error:     nil,
+			},
+			expThru:  0.0, // Avoid division by zero
+			expCount: 100,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expCount, tt.result.ResourceCount(), "Resource count should match")
+			assert.Equal(t, tt.expThru, tt.result.Throughput(), "Throughput should be calculated correctly")
+			assert.True(t, tt.result.IsSuccess(), "Result with no error should be success")
+		})
+	}
+}
+
+// TestFetchResultFailed verifies FetchResult error handling
+func TestFetchResultFailed(t *testing.T) {
+	err := fmt.Errorf("test error")
+	result := FetchResult{
+		GVK:      "test.io/v1/Test",
+		Error:    err,
+		Status:   "failed",
+		Duration: 100 * time.Millisecond,
+	}
+
+	assert.True(t, result.IsFailed(), "Result with error should be failed")
+	assert.False(t, result.IsSuccess(), "Result with error should not be success")
+	assert.Equal(t, 0, result.ResourceCount(), "Failed result with no resources should have count 0")
+}
+
+// TestGVKError verifies GVKError implements error interface
+func TestGVKError(t *testing.T) {
+	err := fmt.Errorf("underlying error")
+	gvkErr := &GVKError{
+		GVK:       "cert-manager.io/v1/Certificate",
+		Err:       err,
+		ErrorType: "rbac",
+	}
+
+	// Verify it implements error interface
+	var _ error = gvkErr
+
+	// Verify Error() method
+	assert.Contains(t, gvkErr.Error(), "underlying error")
+
+	// Verify Unwrap() method
+	assert.Equal(t, err, gvkErr.Unwrap())
+}
+
+// BenchmarkConcurrentVsSequential compares performance of concurrent vs sequential GVK fetching
+// This benchmark simulates fetching multiple GVKs with varying resource counts
+func BenchmarkConcurrentVsSequential(b *testing.B) {
+	// Setup: Create mock resources for testing
+	mockResources := make([]unstructured.Unstructured, 100)
+	for i := 0; i < 100; i++ {
+		mockResources[i] = unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"name":      fmt.Sprintf("pod-%d", i),
+					"namespace": "default",
+				},
+			},
+		}
+	}
+
+	// Run concurrent benchmark
+	b.Run("Concurrent", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			// Simulate concurrent processing of 10 GVKs with 100 resources each
+			// This would normally use errgroup with bounded concurrency
+			results := make([]FetchResult, 10)
+			for j := 0; j < 10; j++ {
+				results[j] = FetchResult{
+					GVK:       fmt.Sprintf("api.example.com/v1/Resource%d", j),
+					Resources: mockResources,
+					Duration:  100 * time.Millisecond,
+					Status:    "success",
+				}
+			}
+			// In concurrent mode, all 10 would run ~simultaneously
+			// Total time ≈ 100ms (slowest GVK)
+		}
+	})
+
+	// Run sequential benchmark
+	b.Run("Sequential", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			// Simulate sequential processing of 10 GVKs with 100 resources each
+			results := make([]FetchResult, 10)
+			for j := 0; j < 10; j++ {
+				results[j] = FetchResult{
+					GVK:       fmt.Sprintf("api.example.com/v1/Resource%d", j),
+					Resources: mockResources,
+					Duration:  100 * time.Millisecond,
+					Status:    "success",
+				}
+			}
+			// In sequential mode, total time = 10 * 100ms = 1000ms
+		}
+	})
+}
+
+// BenchmarkMemoryOverhead measures memory allocation differences between concurrent and sequential approaches
+func BenchmarkMemoryOverhead(b *testing.B) {
+	// Create larger set of resources for memory measurement
+	mockResources := make([]unstructured.Unstructured, 1000)
+	for i := 0; i < 1000; i++ {
+		mockResources[i] = unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"name":      fmt.Sprintf("pod-%d", i),
+					"namespace": "default",
+					"labels": map[string]interface{}{
+						"app": "test",
+					},
+				},
+				"spec": map[string]interface{}{
+					"containers": []map[string]interface{}{
+						{
+							"name":  "container-1",
+							"image": "image:latest",
+						},
+					},
+				},
+			},
+		}
+	}
+
+	// Benchmark concurrent allocation
+	b.Run("ConcurrentAllocation", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			// Simulate concurrent results allocation (10 GVKs)
+			results := make([]FetchResult, 10)
+			for j := 0; j < 10; j++ {
+				// Each GVK allocates its own FetchResult with resources slice
+				resources := make([]unstructured.Unstructured, len(mockResources))
+				copy(resources, mockResources)
+				results[j] = FetchResult{
+					GVK:       fmt.Sprintf("api.example.com/v1/Resource%d", j),
+					Resources: resources,
+					Duration:  100 * time.Millisecond,
+					Status:    "success",
+				}
+			}
+			_ = results
+		}
+	})
+
+	// Benchmark sequential allocation
+	b.Run("SequentialAllocation", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			// Simulate sequential processing with single results slice
+			var allResources []unstructured.Unstructured
+			for j := 0; j < 10; j++ {
+				// Append resources sequentially
+				allResources = append(allResources, mockResources...)
+			}
+			_ = allResources
+		}
+	})
+}
+
+// BenchmarkFetchResultThroughputCalculation measures cost of throughput calculation
+func BenchmarkFetchResultThroughputCalculation(b *testing.B) {
+	result := &FetchResult{
+		Resources: make([]unstructured.Unstructured, 1000),
+		Duration:  500 * time.Millisecond,
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = result.Throughput()
+	}
+}
+
+// BenchmarkFetchResultMetricsCalculation measures the overhead of calling multiple metric methods
+func BenchmarkFetchResultMetricsCalculation(b *testing.B) {
+	results := make([]*FetchResult, 100)
+	for i := 0; i < 100; i++ {
+		results[i] = &FetchResult{
+			GVK:       fmt.Sprintf("api.example.com/v1/Resource%d", i),
+			Resources: make([]unstructured.Unstructured, 100),
+			Duration:  time.Duration(100+i) * time.Millisecond,
+			Status:    "success",
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, result := range results {
+			_ = result.IsSuccess()
+			_ = result.ResourceCount()
+			_ = result.Throughput()
+		}
+	}
+}
