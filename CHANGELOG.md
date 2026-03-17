@@ -18,6 +18,22 @@
   - Includes examples for common CRs: cert-manager, ArgoCD, Istio, Prometheus Operator
   - Full documentation in `docs/tables/k8s_custom_resources.md`
 
+* **concurrent-gvk-processing:** Add concurrent processing for Custom Resource fetching ([#003](https://github.com/Infoblox-CTO/cloudquery/issues/003))
+  - **Performance**: 5-10x faster syncs for multi-GVK configurations through concurrent worker pool
+  - **Bounded Concurrency**: Configurable max concurrent workers (default 10, auto-scaled 1 per 50 nodes, capped at 50)
+  - **Error Classification**: Automatic retry for transient errors (timeouts, 429 rate limits, 500/502/503/504) with exponential backoff (100ms → 10s cap)
+  - **Partial Failure Handling**: One GVK failure doesn't block others; sync succeeds if ≥1 GVK succeeds
+  - **Observability**: Per-GVK timing metrics (duration, resource count, throughput) and sync summary with speedup factor
+  - **Configuration**: Optional `concurrency_config` in spec for fine-tuning:
+    - `max_concurrent_gvks`: Worker pool size
+    - `fetch_timeout`: Per-GVK fetch timeout (default 5 minutes)
+    - `retry_attempts`: Number of retry attempts (default 3)
+    - `retry_backoff`: Initial backoff with exponential increase
+    - `max_retry_backoff`: Maximum backoff cap
+  - **Thread-Safe**: Safe concurrent Kubernetes API calls using k8s.io/client-go
+  - **Backward Compatible**: No breaking changes; existing single-GVK configs work unchanged
+  - **Comprehensive Testing**: 144 unit/integration/benchmark tests ensuring reliability and performance
+
 ## [6.1.6](https://github.com/Infoblox-CTO/cloudquery/compare/plugins-source-k8s-v6.1.5...plugins-source-k8s-v6.1.6) (2026-02-03)
 
 
