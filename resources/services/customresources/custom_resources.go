@@ -210,12 +210,13 @@ func fetchCustomResources(ctx context.Context, meta schema.ClientMeta, parent *s
 	}
 
 	// Generate and log sync summary with metrics
-	contextName := ctx.Value("context")
-	if contextName == nil {
+	// Use cl.Context to get the actual Kubernetes context name
+	contextName := cl.Context
+	if contextName == "" {
 		contextName = "unknown"
 	}
 
-	summary := GenerateSyncSummary(fmt.Sprintf("%v", contextName), syncStartTime, config.MaxConcurrentGVKs, metrics)
+	summary := GenerateSyncSummary(contextName, syncStartTime, config.MaxConcurrentGVKs, metrics)
 
 	// Log summary with key metrics
 	cl.Logger().Info().
